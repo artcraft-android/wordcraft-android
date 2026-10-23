@@ -1,0 +1,5 @@
+# UniFFI bindings of the `wordcraft_android` library.
+
+[bindings.kotlin]
+package_name = "io.github.artcraftandroid.wordcraft.core"
+cdylib_name = "wordcraft_android"

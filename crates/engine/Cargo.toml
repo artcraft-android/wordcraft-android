@@ -1,0 +1,42 @@
+[package]
+name = "wordcraft-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "WordCraft engine: session, selection, undo, the command registry (every action is a command), Word's command catalog, file I/O dispatch"
+
+[lints]
+workspace = true
+
+[dependencies]
+wordcraft-geom = { workspace = true }
+wordcraft-doc = { workspace = true }
+wordcraft-fonts = { workspace = true }
+wordcraft-layout = { workspace = true }
+wordcraft-render = { workspace = true }
+wordcraft-metafile = { workspace = true }
+wordcraft-proof = { workspace = true }
+wordcraft-docx = { workspace = true }
+wordcraft-docbin = { workspace = true }
+wordcraft-pdf = { workspace = true }
+wordcraft-formats = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+regex = { workspace = true }
+regex-automata = { workspace = true }
+image = { workspace = true }
+zeroize = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# The browser clock for `now_iso` (`SystemTime::now()` panics on wasm32).
+js-sys = "0.3"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+getrandom = { workspace = true }
+
+[dev-dependencies]
+encoding_rs = { workspace = true }
+zip = { workspace = true }
+cfb = { workspace = true }

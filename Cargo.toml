@@ -1,0 +1,105 @@
+[workspace]
+resolver = "3"
+members = ["crates/doc", "crates/docbin", "crates/docx", "crates/engine", "crates/fonts", "crates/formats", "crates/geom", "crates/layout", "crates/metafile", "crates/pdf", "crates/proof", "crates/render", "apps/wordcraft-android", "apps/wordcraft-android/bindgen"]
+
+[workspace.package]
+version = "0.7.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.95"
+repository = "https://github.com/storytold/wordcraft"
+
+[workspace.dependencies]
+# internal
+wordcraft-geom = { path = "crates/geom" }
+wordcraft-doc = { path = "crates/doc" }
+wordcraft-fonts = { path = "crates/fonts" }
+wordcraft-layout = { path = "crates/layout" }
+wordcraft-docx = { path = "crates/docx" }
+wordcraft-docbin = { path = "crates/docbin" }
+wordcraft-formats = { path = "crates/formats" }
+wordcraft-render = { path = "crates/render" }
+wordcraft-pdf = { path = "crates/pdf" }
+wordcraft-proof = { path = "crates/proof" }
+wordcraft-engine = { path = "crates/engine" }
+wordcraft-mcp = { path = "crates/mcp" }
+wordcraft-zotero = { path = "crates/zotero" }
+wordcraft-control-key = { path = "crates/control-key" }
+wordcraft-ui-egui = { path = "crates/ui-egui" }
+wordcraft-metafile = { path = "crates/metafile" }
+
+# foundation
+kurbo = { version = "0.13", features = ["serde"] }
+thiserror = "2"
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+log = "0.4"
+proptest = "1"
+rayon = "1"
+unicode-bidi = "0.3"
+unicode-segmentation = "1"
+unicode-linebreak = "0.1"
+unicode-script = "0.5"
+regex = { version = "1", default-features = false, features = ["std", "unicode", "perf"] }
+regex-automata = { version = "0.4", default-features = false, features = ["std", "syntax", "meta", "nfa-pikevm", "unicode"] }
+
+# text / rendering / formats
+skrifa = "0.47"
+harfrust = "0.13"
+# WOFF / WOFF2 web fonts added by the user (#582): pure Rust (MIT); its brotli and zlib decoders
+# (brotli-decompressor, flate2) are already in the tree.
+wuff = "0.2.9"
+vello_cpu = "0.2"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp", "tiff"] }
+craft-pdf = { git = "https://github.com/storytold/craft-libs", rev = "c3487320b2d1de657b860b3c8abb44e1f2b32bd8", version = "=0.1.0", default-features = false, features = ["write"] }
+quick-xml = "0.41"
+zip = { version = "3", default-features = false, features = ["deflate"] }
+# zlib streams (compressed metafile pictures in `.doc` drawings); already in the lock as a dependency of other crates.
+miniz_oxide = "0.8"
+cfb = "0.15"
+# Legacy text encodings (GBK/GB18030, Big5, Shift_JIS, EUC-KR, single-byte code pages) for plain
+# text and CSV recipient lists (#778): encoding_rs ((Apache-2.0 OR MIT) AND BSD-3-Clause) and its
+# detector chardetng (Apache-2.0 OR MIT), both pure Rust (Firefox's).
+encoding_rs = "0.8"
+chardetng = "1"
+# Password-protected (agile-encrypted) Word documents: pure-Rust RustCrypto primitives.
+aes = "0.9"
+sha1 = "0.11"
+sha2 = "0.11"
+hmac = "0.13"
+base64 = "0.22"
+getrandom = "0.3"
+zeroize = "1"
+
+# ui
+egui = "0.36"
+egui_extras = { version = "0.36", default-features = false }
+eframe = { version = "0.36", default-features = false }
+egui_kittest = "0.36"
+rfd = "0.17"
+arboard = { version = "3.6", default-features = false, features = ["wayland-data-control"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+too_many_arguments = "allow"
+type_complexity = "allow"
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 16
+debug = 0
+
+# Required by craft-pdf: the backend rejects writers that failed during unwinding.
+[patch.crates-io]
+krilla = { git = "https://github.com/storytold/craft-libs", rev = "c3487320b2d1de657b860b3c8abb44e1f2b32bd8" }

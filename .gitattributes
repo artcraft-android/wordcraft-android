@@ -1,0 +1,13 @@
+# Every checkout is byte-identical to the repository: no line-ending conversion, ever.
+# Windows checkouts default to core.autocrlf=true, which would rewrite the assets whose
+# sidecars and ATTRIBUTION.md record them, and the scripts CI runs.
+* -text
+
+# Not text at all: no textual diffs or merges either.
+*.png binary
+*.jpg binary
+*.ttf binary
+*.ico binary
+*.icns binary
+*.jar binary
+*.p12 binary

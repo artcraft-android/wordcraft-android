@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Files of WordCraft's that another app may reach through its FileProvider: a document or PDF
+     being shared -->
+<paths>
+    <cache-path name="share" path="share/" />
+</paths>

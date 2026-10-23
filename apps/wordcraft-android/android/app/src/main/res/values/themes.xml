@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- the start screen's light surface, so nothing flashes before the first frame -->
+    <color name="window_background">#FFFFFFFF</color>
+    <!-- WordCraft blue, the app icon's field (assets/app-icon/wordcraft.svg) -->
+    <color name="ic_launcher_background">#FF3B5BDB</color>
+
+    <style name="Theme.WordCraft" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

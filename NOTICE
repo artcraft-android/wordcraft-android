@@ -1,0 +1,36 @@
+WordCraft for Android
+Copyright (c) 2026 ArtCraft Team and the WordCraft contributors.
+
+This repository holds the Android app and the parts of WordCraft (https://github.com/storytold/wordcraft)
+it builds: the engine crates and assets/.
+Licensed under the MIT License or the Apache License, Version 2.0, at your option
+(LICENSE-MIT, LICENSE-APACHE).
+
+Third-party material
+
+This product bundles third-party material under its own licenses, listed below. The per-file
+list (author, source, license) is in ATTRIBUTION.md.
+
+- Lucide icons (assets/icons/*.svg) — ISC License. See assets/icons/LICENSE-lucide.txt. The Android
+  app turns them into Compose path data at build time.
+- Inter typeface (assets/fonts/Inter-*.ttf) — SIL Open Font License 1.1. See assets/fonts/OFL-Inter.txt.
+- JetBrains Mono typeface (assets/fonts/JetBrainsMono-Regular.ttf) — SIL Open Font License 1.1. See assets/fonts/OFL-JetBrainsMono.txt.
+- Source Sans 3 and Source Serif 4 typefaces (assets/fonts/SourceSans3-*.ttf, SourceSerif4-*.ttf) —
+  SIL Open Font License 1.1. See assets/fonts/OFL-SourceSans3.txt and OFL-SourceSerif4.txt.
+- Hyphenation patterns: English (assets/hyphenation/en-us.pat, our own, CC0-1.0) and the Moby
+  Hyphenator II word list (assets/hyphenation/en-us.dic, public domain); Polish and Italian
+  (hyph-utf8, MIT) and Portuguese (hyph-utf8, BSD 3-clause), each file carrying its notice.
+- Fonts from craft-fonts (https://github.com/storytold/craft-fonts), an optional build input
+  (CRAFT_FONTS_DIR) that is not part of this repository. Builds made with it embed the fonts listed in
+  https://github.com/storytold/craft-fonts/blob/main/ATTRIBUTION.md under the SIL Open Font License 1.1.
+- Rust crates from crates.io (Cargo.lock lists them), each under its own license.
+
+Downloaded at build time, never in this repository, bundled in the app with their licenses:
+
+- Carlito and Caladea typefaces (from google/fonts, pinned to a commit and checked against their
+  SHA-256) — SIL Open Font License 1.1.
+- Liberation Sans, Serif and Mono 2.1.5 (from liberation-fonts' release, checked against its
+  SHA-256) — SIL Open Font License 1.1.
+
+WordCraft for Android is not affiliated with or endorsed by Microsoft. Word is a trademark of
+Microsoft Corporation.

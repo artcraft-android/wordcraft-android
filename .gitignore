@@ -1,0 +1,7 @@
+*~
+/target
+/target-*/
+/dist
+.DS_Store
+.claude/
+local.properties
