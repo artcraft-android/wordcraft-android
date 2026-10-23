@@ -53,7 +53,13 @@ class EditorInputView(context: Context) : View(context) {
         isFocusableInTouchMode = true
     }
 
-    override fun onCheckIsTextEditor(): Boolean = true
+    /**
+     * Off while the document is only read: the system then doesn't bring the keyboard up for this
+     * view by itself (as it does when a dialog closes and the focus comes back).
+     */
+    var textEditor = true
+
+    override fun onCheckIsTextEditor(): Boolean = textEditor
 
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection {
         outAttrs.inputType = InputType.TYPE_CLASS_TEXT or
@@ -70,6 +76,10 @@ class EditorInputView(context: Context) : View(context) {
 
     /** Take the focus and show the keyboard. */
     fun showKeyboard() {
+        if (!textEditor) {
+            textEditor = true
+            imm?.restartInput(this)
+        }
         requestFocus()
         imm?.showSoftInput(this, 0)
     }

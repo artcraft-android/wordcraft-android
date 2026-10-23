@@ -159,6 +159,14 @@ fun EditorScreen(vm: AppViewModel) {
     LaunchedEffect(vm.hideKeyboardRequests) { if (vm.hideKeyboardRequests > 0) input?.hideKeyboard() }
     LaunchedEffect(vm.keyboardRequests) { if (vm.keyboardRequests > 0 && vm.editing) input?.showKeyboard() }
     LaunchedEffect(vm.paletteOpen, vm.editing) { if (vm.paletteOpen || !vm.editing) input?.hideKeyboard() }
+    LaunchedEffect(vm.editing, input) { if (!vm.editing) input?.textEditor = false }
+    // closing the document: its keyboard goes with it
+    val root = androidx.compose.ui.platform.LocalView.current
+    androidx.compose.runtime.DisposableEffect(root) {
+        onDispose {
+            root.context.getSystemService(android.view.inputmethod.InputMethodManager::class.java)?.hideSoftInputFromWindow(root.windowToken, 0)
+        }
+    }
     // the overflow sheet takes the whole screen: the keyboard goes
     LaunchedEffect(vm.overflowOpen) {
         if (vm.overflowOpen) {
@@ -198,8 +206,8 @@ fun EditorScreen(vm: AppViewModel) {
         if (!viewport.gesturing) viewport.reveal(r.page.toInt(), r.x, r.y, r.height, 48f * density)
     }
     val toolbarOn = vm.editing && !vm.paletteOpen && !vm.findSettingsOpen && !vm.reading && !vm.commentsOpen && !vm.headingsOpen
-    // a finger scrolling towards the end hides the floating toolbar; scrolling back, a double tap
-    // or a long press brings it back
+    // a finger scrolling towards the end hides the floating toolbar; scrolling back, a double tap,
+    // a long press, a tap that brings the keyboard up or another view brings it back
     var toolbarAway by remember { mutableStateOf(false) }
     LaunchedEffect(viewport) {
         var last = viewport.scrollY
@@ -211,7 +219,7 @@ fun EditorScreen(vm: AppViewModel) {
             }
         }
     }
-    LaunchedEffect(vm.editing) { toolbarAway = false }
+    LaunchedEffect(vm.editing, vm.viewMode, vm.keyboardRequests) { toolbarAway = false }
     val away by androidx.compose.animation.core.animateFloatAsState(if (toolbarAway) 1f else 0f, tween(io.github.artcraftandroid.wordcraft.ui.Motion.FLOATING, easing = androidx.compose.animation.core.FastOutSlowInEasing), label = "toolbarAway")
     // switching between the pages and Mobile View: the canvas is covered, then shows through
     val cover = remember { androidx.compose.animation.core.Animatable(0f) }

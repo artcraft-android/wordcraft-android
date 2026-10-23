@@ -589,8 +589,7 @@ impl MobileSession {
     /// The check box, list or date control at the caret, which a tap fills in (`None` elsewhere,
     /// and in other kinds of control).
     pub fn form_control(&self) -> Option<FormControl> {
-        let mut s = self.lock();
-        let r = s.run("developer.control", &json!({})).ok()?;
+        let r = probe(&mut self.lock(), "developer.control", &json!({}))?;
         let kind = r.get("type").and_then(Value::as_str)?;
         if !matches!(kind, "checkBox" | "dropDown" | "comboBox" | "date") {
             return None;
@@ -622,8 +621,7 @@ impl MobileSession {
         if !matches!(ext.as_str(), "txt" | "text") {
             return None;
         }
-        let mut s = self.lock();
-        let r = s.run("file.textEncoding", &json!({ "path": path, "chars": 0 })).ok()?;
+        let r = probe(&mut self.lock(), "file.textEncoding", &json!({ "path": path, "chars": 0 }))?;
         if r.get("guessed").and_then(Value::as_bool) != Some(true) {
             return None;
         }
@@ -1544,6 +1542,15 @@ fn render_options(s: &Session) -> RenderOptions {
     opts.dark = s.view.dark_mode;
     opts.dark_paper = DARK_PAPER;
     opts
+}
+
+/// Run a command only to look (is there a control at the caret?): when it fails, its message
+/// doesn't become the status the app shows next.
+fn probe(s: &mut Session, id: &str, params: &Value) -> Option<Value> {
+    let status = std::mem::take(&mut s.status);
+    let r = s.run(id, params);
+    s.status = status;
+    r.ok()
 }
 
 fn open_error(e: &CmdError) -> MobileError {

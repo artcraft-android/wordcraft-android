@@ -620,6 +620,18 @@ fn form_controls_at_the_caret_are_reported_for_filling_in() {
 }
 
 #[test]
+fn looking_for_a_form_control_leaves_no_message() {
+    let m = MobileSession::new();
+    // a tap in plain text looks for a control and finds none: nothing to tell the user
+    assert_eq!(m.form_control(), None);
+    assert_eq!(m.take_events().status, None);
+    // a message from a real command is still there after a look
+    assert!(m.execute("developer.toggleCheckBox".into(), "{}".into()).is_err());
+    assert_eq!(m.form_control(), None);
+    assert!(m.take_events().status.is_some_and(|s| s.contains("content control")));
+}
+
+#[test]
 fn a_text_file_that_is_not_unicode_opens_in_the_encoding_chosen() {
     let dir = std::env::temp_dir().join(format!("wc-enc-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();

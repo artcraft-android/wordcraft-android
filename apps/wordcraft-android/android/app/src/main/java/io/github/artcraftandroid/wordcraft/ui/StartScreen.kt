@@ -57,6 +57,11 @@ fun StartScreen(vm: AppViewModel, onOpen: () -> Unit) {
     var searching by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var creating by remember { mutableStateOf(false) }
+    // Back ends a search before it leaves the app
+    androidx.activity.compose.BackHandler(enabled = searching) {
+        searching = false
+        query = ""
+    }
     Box(Modifier.fillMaxSize().background(WordColors.Surface).statusBarsPadding().navigationBarsPadding()) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().height(56.dp).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -208,6 +213,8 @@ private fun OpenRow(icon: ImageVector, title: String, detail: String, enabled: B
 /** Create new: a blank document or one of WordCraft's own templates. */
 @Composable
 private fun NewSheet(vm: AppViewModel, onClose: () -> Unit) {
+    // Back closes the sheet, not the app
+    androidx.activity.compose.BackHandler(onBack = onClose)
     Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0x99000000)).clickable(onClick = onClose)) {
         Column(
             Modifier.align(Alignment.BottomCenter).fillMaxWidth().clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)).background(WordColors.Surface).clickable {}.padding(bottom = 12.dp),
