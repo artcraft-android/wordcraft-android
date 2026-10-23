@@ -24,10 +24,98 @@
 </p>
 
 <p align="center">
+  <a href="#reading-and-writing">Reading &amp; writing</a> ·
+  <a href="#insert-and-tables">Insert &amp; tables</a> ·
+  <a href="#review">Review</a> ·
+  <a href="#draw-and-read-aloud">Draw &amp; Read Aloud</a> ·
+  <a href="#tell-me-and-home">Tell Me &amp; Home</a> ·
   <a href="#planned-features">Planned features</a> ·
   <a href="#building-instructions">Building</a> ·
   <a href="#license">License</a>
 </p>
+
+<br>
+
+<p align="center">
+  <img src="docs/images/editor.png" alt="The editor in Print View: the first page of The Open Studio Handbook on a dark page, with its header, headings, a bulleted list, a table of shared equipment and a numbered list, and the floating toolbar with Insert, Dictate, Bold, Italic, Underline, Highlight, Font Color, Bullets and Numbering" width="250">
+  <br>
+  <sub>Editing in Print View: dark pages, the document's own layout, and the floating toolbar.</sub>
+</p>
+
+<br>
+
+## Reading and writing
+
+<table align="center">
+<tr>
+<td align="center"><img src="docs/images/mobile-view.png" alt="Mobile View: The Open Studio Handbook reflowed to the phone's width in large type, the caret at the title, and the floating toolbar" width="250"></td>
+<td align="center"><img src="docs/images/home-tab.png" alt="The Home tab under the page: the font and size, Bold, Italic, Underline and Strikethrough, Highlight, Font Color, Clear Formatting, More Formatting, Bullets and Numbering" width="250"></td>
+</tr>
+<tr>
+<td align="center"><sub>Mobile View: the text reflowed to fit the phone</sub></td>
+<td align="center"><sub>The Home tab: fonts, sizes, colours, lists and styles</sub></td>
+</tr>
+</table>
+
+<br>
+
+## Insert and tables
+
+<table align="center">
+<tr>
+<td align="center"><img src="docs/images/insert-tab.png" alt="The Insert tab: Blank Page, Scan Document, Table, Pictures, Shapes, Text Box, Link and Comment" width="250"></td>
+<td align="center"><img src="docs/images/table.png" alt="The caret in the equipment table and the Table tab: Delete, Insert Rows and Columns, Merge Cells, Split Cells, Style Options, Table Styles and Shading" width="250"></td>
+</tr>
+<tr>
+<td align="center"><sub>Insert: pictures, camera scans, tables, shapes, links and more</sub></td>
+<td align="center"><sub>Tables: rows and columns, merging, styles and shading</sub></td>
+</tr>
+</table>
+
+<br>
+
+## Review
+
+<table align="center">
+<tr>
+<td align="center"><img src="docs/images/comments.png" alt="Comments: Quiet hours highlighted in the text, and the Comments pane with a comment from Mara Okafor, a reply from Theo Park, and Reply, Resolve and Delete" width="250"></td>
+<td align="center"><img src="docs/images/review.png" alt="A tracked change in the table, Two days' notice inserted and 48 h notice struck through, and the Review tab with Resolve, Track Changes turned on, All Markup, Accept and Reject" width="250"></td>
+</tr>
+<tr>
+<td align="center"><sub>Comments with replies</sub></td>
+<td align="center"><sub>Track changes, accept and reject</sub></td>
+</tr>
+</table>
+
+<br>
+
+## Draw and Read Aloud
+
+<table align="center">
+<tr>
+<td align="center"><img src="docs/images/draw.png" alt="A red pen circle drawn round the tracked change, and the Draw tab: Draw with Touch, Stroke Eraser, Pen and Highlighter, four pen colours, Color and Thickness" width="250"></td>
+<td align="center"><img src="docs/images/read-aloud.png" alt="Read Aloud on the first page: the sentence being read highlighted, the word being spoken marked, and the bar with previous, pause, next, settings and close" width="250"></td>
+</tr>
+<tr>
+<td align="center"><sub>Draw with touch: pens and highlighters</sub></td>
+<td align="center"><sub>Read Aloud with the phone's own voices</sub></td>
+</tr>
+</table>
+
+<br>
+
+## Tell Me and Home
+
+<table align="center">
+<tr>
+<td align="center"><img src="docs/images/tellme.png" alt="Tell Me: a search field, Recently Used (Headings, Equation) and Suggested (Styles, Table, Pictures, Track Changes, Word Count)" width="250"></td>
+<td align="center"><img src="docs/images/home.png" alt="Home: Recent with two documents, and the New sheet: Blank document, Sample, Letter, Resume and Report" width="250"></td>
+</tr>
+<tr>
+<td align="center"><sub>Tell Me: every command, searched by name</sub></td>
+<td align="center"><sub>Home: recent documents, and new ones from templates</sub></td>
+</tr>
+</table>
 
 <br>
 
