@@ -181,7 +181,7 @@ internal fun TellMeHeader(vm: AppViewModel, query: String, onQuery: (String) -> 
         Modifier.fillMaxWidth().height(ROW).background(WordColors.Strip).topEdge(WordColors.StripMore).bottomEdge(WordColors.StripMore),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        BarButton(LucideIcons.ChevronLeft.glyph(), WordColors.Accent, { vm.tellMeOpen = false }, width = 56.dp, height = ROW)
+        BarButton(LucideIcons.ChevronLeft.glyph(), WordColors.BackIcon, { vm.tellMeOpen = false }, width = 56.dp, height = ROW)
         Box(Modifier.width(1.dp).height(32.dp).background(WordColors.SwitcherDivider))
         Box(Modifier.weight(1f).padding(start = 16.dp, end = 4.dp), contentAlignment = Alignment.CenterStart) {
             if (query.isEmpty()) Text("Search for a command", color = WordColors.HeaderIconDisabled, fontSize = 16.sp, maxLines = 1)
@@ -197,8 +197,7 @@ internal fun TellMeHeader(vm: AppViewModel, query: String, onQuery: (String) -> 
             )
         }
         if (query.isNotEmpty()) BarButton(LucideIcons.X.glyph(), WordColors.HeaderIcon, { onQuery("") }, width = 48.dp, height = ROW)
-        Box(Modifier.width(1.dp).height(32.dp).background(WordColors.SwitcherDivider))
-        BarButton(Glyph.Triangle(up = false), WordColors.AccentDark, vm::collapsePalette, width = 43.dp, height = ROW)
+        BarButton(Glyph.Triangle(up = false), WordColors.CollapseIcon, vm::collapsePalette, width = 43.dp, height = ROW)
     }
 }
 

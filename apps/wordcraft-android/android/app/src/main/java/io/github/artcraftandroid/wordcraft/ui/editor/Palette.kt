@@ -186,7 +186,7 @@ private fun TabHeader(vm: AppViewModel, tab: String) {
         Row(Modifier.widthIn(min = 112.dp).fillMaxHeight().clickable { vm.toggleTabs() }.padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(tab, color = WordColors.Accent, fontSize = 18.sp, maxLines = 1)
             Spacer(Modifier.width(12.dp).weight(1f, fill = false))
-            GlyphIcon(LucideIcons.ChevronsUpDown.glyph(), WordColors.Accent, size = 20.dp)
+            GlyphIcon(LucideIcons.ChevronsUpDown.glyph(), WordColors.SwitchIcon, size = 20.dp)
             Spacer(Modifier.width(10.dp))
         }
         Box(Modifier.width(1.dp).height(32.dp).background(WordColors.SwitcherDivider))
@@ -194,8 +194,7 @@ private fun TabHeader(vm: AppViewModel, tab: String) {
         BarButton(LucideIcons.Lightbulb.glyph(), WordColors.HeaderIcon, { vm.tellMeOpen = true }, width = 48.dp, height = ROW)
         BarButton(LucideIcons.Undo2.glyph(), WordColors.HeaderIcon, vm::undo, enabled = info?.canUndo == true, width = 48.dp, height = ROW, disabledTint = WordColors.HeaderIconDisabled)
         BarButton(LucideIcons.Redo2.glyph(), WordColors.HeaderIcon, vm::redo, enabled = info?.canRedo == true, width = 48.dp, height = ROW, disabledTint = WordColors.HeaderIconDisabled)
-        Box(Modifier.width(1.dp).height(32.dp).background(WordColors.SwitcherDivider))
-        BarButton(Glyph.Triangle(up = false), WordColors.AccentDark, vm::collapsePalette, width = 43.dp, height = ROW)
+        BarButton(Glyph.Triangle(up = false), WordColors.CollapseIcon, vm::collapsePalette, width = 43.dp, height = ROW)
     }
 }
 
@@ -205,11 +204,10 @@ private fun PanelHeader(title: String, onBack: () -> Unit, onClose: () -> Unit) 
         Modifier.fillMaxWidth().height(ROW).background(WordColors.Strip).topEdge(WordColors.StripMore).bottomEdge(WordColors.StripMore),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        BarButton(LucideIcons.ChevronLeft.glyph(), WordColors.Accent, onBack, width = 56.dp, height = ROW)
+        BarButton(LucideIcons.ChevronLeft.glyph(), WordColors.BackIcon, onBack, width = 56.dp, height = ROW)
         Box(Modifier.width(1.dp).height(32.dp).background(WordColors.SwitcherDivider))
         Text(title, color = WordColors.Accent, fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 16.dp))
-        Box(Modifier.width(1.dp).height(32.dp).background(WordColors.SwitcherDivider))
-        BarButton(Glyph.Triangle(up = false), WordColors.AccentDark, onClose, width = 43.dp, height = ROW)
+        BarButton(Glyph.Triangle(up = false), WordColors.CollapseIcon, onClose, width = 43.dp, height = ROW)
     }
 }
 

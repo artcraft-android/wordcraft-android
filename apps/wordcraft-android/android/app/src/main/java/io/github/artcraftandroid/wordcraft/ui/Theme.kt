@@ -25,9 +25,6 @@ object WordColors {
     /** Tab and panel titles, their icons, the selection. */
     val Accent get() = pick(0xFF3B5BDB, 0xFF7C93F0)
 
-    /** The darker accent (lighter in dark): the palette's open/close handle, the current tab's label. */
-    val AccentDark get() = pick(0xFF2B44A8, 0xFFA5B4F5)
-
     /** Small coloured parts of icons (list bullets, the strip's more arrow). */
     val AccentLight get() = pick(0xFF4C6EF5, 0xFF7C93F0)
     val AccentDisabled get() = pick(0xFF99A7E1, 0xFF4A5583)
@@ -40,6 +37,14 @@ object WordColors {
 
     /** The palette header's Tell Me, Undo and Redo. */
     val HeaderIcon get() = pick(0xFF3B5BDB, 0xFFCACACA)
+
+    /**
+     * The palette header's tab-switch arrows, collapse arrow and Back: the accent in light; in
+     * dark white, light grey and grey, as the phone app draws them.
+     */
+    val SwitchIcon get() = pick(0xFF3B5BDB, 0xFFFFFFFF)
+    val CollapseIcon get() = pick(0xFF2B44A8, 0xFFE8E8E8)
+    val BackIcon get() = pick(0xFF3B5BDB, 0xFF6E6E6E)
     val HeaderIconDisabled get() = pick(0xFF99A7E1, 0xFF575757)
 
     /** Bottom sheets (the header's overflow). */
