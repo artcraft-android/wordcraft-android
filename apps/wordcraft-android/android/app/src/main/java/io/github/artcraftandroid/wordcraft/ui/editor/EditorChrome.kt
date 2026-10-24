@@ -248,7 +248,7 @@ fun ResumeCallout(page: Int, onGo: () -> Unit, onClose: () -> Unit, modifier: Mo
         Row(Modifier.height(64.dp).padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             GlyphIcon(LucideIcons.BookOpenText.glyph(), WordColors.Accent, size = 24.dp)
             Column(Modifier.padding(start = 14.dp, end = 8.dp)) {
-                Text("Pick up where you left off", color = WordColors.OnPill, fontSize = 15.sp)
+                Text("Back to where you were", color = WordColors.OnPill, fontSize = 15.sp)
                 Text("Page $page", color = WordColors.Accent, fontSize = 14.sp)
             }
             BarButton(LucideIcons.X.glyph(), WordColors.OnPill, onClose, width = 48.dp, height = 64.dp, iconSize = 20.dp)

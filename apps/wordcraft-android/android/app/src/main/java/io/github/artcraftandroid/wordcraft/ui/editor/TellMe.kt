@@ -184,7 +184,7 @@ internal fun TellMeHeader(vm: AppViewModel, query: String, onQuery: (String) -> 
         BarButton(LucideIcons.ChevronLeft.glyph(), WordColors.Accent, { vm.tellMeOpen = false }, width = 56.dp, height = ROW)
         Box(Modifier.width(1.dp).height(32.dp).background(WordColors.SwitcherDivider))
         Box(Modifier.weight(1f).padding(start = 16.dp, end = 4.dp), contentAlignment = Alignment.CenterStart) {
-            if (query.isEmpty()) Text("Tell me what you want to do", color = WordColors.HeaderIconDisabled, fontSize = 16.sp, maxLines = 1)
+            if (query.isEmpty()) Text("Search for a command", color = WordColors.HeaderIconDisabled, fontSize = 16.sp, maxLines = 1)
             BasicTextField(
                 value = query,
                 onValueChange = onQuery,
