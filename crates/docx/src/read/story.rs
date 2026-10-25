@@ -2042,7 +2042,8 @@ fn effect_list(l: &El) -> ShapeEffects {
         // `rotWithShape` is true unless it says otherwise (ECMA-376 §20.1.8.49).
         let rot_with_shape = e.attr("rotWithShape").is_none_or(|v| !matches!(v, "0" | "false" | "off"));
         // a perspective shadow's flattening (`sy`, 1000ths of a percent) and lean (`kx`, 60000ths of a degree)
-        let scale_y = e.attr("sy").and_then(int).map_or(100.0, |v| v.clamp(-100_000, 100_000) as f32 / 1000.0);
+        let scale_y = e.attr("sy").and_then(int).map_or(100.0, |v| v.clamp(-200_000, 200_000) as f32 / 1000.0);
+        let scale_x = e.attr("sx").and_then(int).map_or(100.0, |v| v.clamp(-200_000, 200_000) as f32 / 1000.0);
         let skew_x = e.attr("kx").and_then(int).map_or(0.0, |v| v.clamp(-5_400_000, 5_400_000) as f32 / 60_000.0);
         Shadow {
             color: color.unwrap_or(Rgb::BLACK),
@@ -2052,6 +2053,7 @@ fn effect_list(l: &El) -> ShapeEffects {
             angle,
             rot_with_shape,
             scale_y,
+            scale_x,
             skew_x,
         }
     });

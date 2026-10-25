@@ -53,10 +53,14 @@ pub struct Shadow {
     pub angle: f32,
     pub rot_with_shape: bool,
     /// A perspective shadow: the silhouette flattened to `scale_y` percent of its height from
-    /// its bottom edge (negative: turned down below it) and leaning `skew_x` degrees (positive:
-    /// its top to the right) before it is cast (DrawingML `sy`, `kx`).
+    /// its bottom edge (negative: turned down below it), `scale_x` percent of its width about its
+    /// middle, and leaning `skew_x` degrees (positive: its top to the left, as DrawingML's `kx`)
+    /// before it is cast (DrawingML `sx`, `sy`, `kx`). A shadow scaled evenly ("Offset: Center",
+    /// 102%) is no perspective.
     #[serde(skip_serializing_if = "is_hundred")]
     pub scale_y: f32,
+    #[serde(skip_serializing_if = "is_hundred")]
+    pub scale_x: f32,
     #[serde(skip_serializing_if = "is_zero_f")]
     pub skew_x: f32,
 }
@@ -71,12 +75,23 @@ fn is_zero_f(v: &f32) -> bool {
 impl Default for Shadow {
     /// "Offset: Bottom Right".
     fn default() -> Self {
-        Shadow { color: Rgb::BLACK, transparency: 60.0, blur: 4.0, distance: 3.0, angle: 45.0, rot_with_shape: false, scale_y: 100.0, skew_x: 0.0 }
+        Shadow {
+            color: Rgb::BLACK,
+            transparency: 60.0,
+            blur: 4.0,
+            distance: 3.0,
+            angle: 45.0,
+            rot_with_shape: false,
+            scale_y: 100.0,
+            scale_x: 100.0,
+            skew_x: 0.0,
+        }
     }
 }
 
-/// An inner shadow: the shape's outside, blurred `blur` points and moved `distance` points in
-/// direction `angle` (degrees clockwise from the positive x axis), showing inside it.
+/// An inner shadow: the shape's outside, blurred `blur` points and moved `distance` points
+/// against direction `angle` (degrees clockwise from the positive x axis), showing inside it: it
+/// darkens the edges `angle` points to, as Word saves and draws it ("Inside: Top Left" is 225°).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct InnerShadow {
@@ -90,7 +105,7 @@ pub struct InnerShadow {
 impl Default for InnerShadow {
     /// "Inside: Top Left".
     fn default() -> Self {
-        InnerShadow { color: Rgb::BLACK, transparency: 50.0, blur: 5.0, distance: 4.0, angle: 45.0 }
+        InnerShadow { color: Rgb::BLACK, transparency: 50.0, blur: 5.0, distance: 8.0, angle: 225.0 }
     }
 }
 
@@ -108,20 +123,21 @@ pub const INNER_SHADOW_PRESETS: [(&str, &str); 9] = [
 ];
 
 impl InnerShadow {
-    /// A preset by id (see [`INNER_SHADOW_PRESETS`]): the shadow lies along the named edges.
+    /// A preset by id (see [`INNER_SHADOW_PRESETS`]): the shadow lies along the named edges,
+    /// its direction pointing to them, as Word saves it.
     pub fn preset(id: &str) -> Option<InnerShadow> {
         let d = InnerShadow::default();
-        // the outside moves away from the named edges, so its shadow falls on them
         let angle = match id {
-            "insideTopLeft" => 45.0,
-            "insideTop" => 90.0,
-            "insideTopRight" => 135.0,
-            "insideRight" => 180.0,
-            "insideBottomRight" => 225.0,
-            "insideBottom" => 270.0,
-            "insideBottomLeft" => 315.0,
-            "insideLeft" => 0.0,
-            "insideCenter" => return Some(InnerShadow { distance: 0.0, blur: 9.0, ..d }),
+            "insideTopLeft" => 225.0,
+            "insideTop" => 270.0,
+            "insideTopRight" => 315.0,
+            "insideRight" => 0.0,
+            "insideBottomRight" => 45.0,
+            "insideBottom" => 90.0,
+            "insideBottomLeft" => 135.0,
+            "insideLeft" => 180.0,
+            // all round, solid black blurred 9 pt
+            "insideCenter" => return Some(InnerShadow { distance: 0.0, angle: 0.0, blur: 9.0, transparency: 0.0, ..d }),
             _ => return None,
         };
         Some(InnerShadow { angle, ..d })
@@ -137,7 +153,8 @@ impl InnerShadow {
             angle: if angle < 360.0 { angle } else { 0.0 },
         }
     }
-    /// The offset of the outside, points (x right, y down).
+    /// The shadow's offset, points (x right, y down): toward the edges it darkens (the outside
+    /// moves the other way).
     pub fn offset(&self) -> (f32, f32) {
         let s = self.sanitized();
         let a = s.angle.to_radians();
@@ -214,8 +231,18 @@ impl Reflection {
             "8pt" => 8.0,
             _ => return None,
         };
-        let start = if size > 60.0 { 50.0 } else { 52.0 };
-        Some(Reflection { start, size, distance, ..Reflection::default() })
+        // as Word saves each: a little further down with the distance, and a touch fainter
+        // at the end for the 8 pt tight and full ones
+        let (start, end, size) = match (size as i32, rest) {
+            (35, "Touching") => (52.0, 0.3, 35.0),
+            (35, "4pt") => (50.0, 0.3, 38.5),
+            (35, _) => (50.0, 0.275, 40.0),
+            (55, "Touching") => (50.0, 0.3, 55.0),
+            (55, _) => (50.0, 0.3, 55.5),
+            (_, "8pt") => (50.0, 0.295, 92.0),
+            _ => (50.0, 0.3, 90.0),
+        };
+        Some(Reflection { start, end, size, distance, ..Reflection::default() })
     }
     /// Finite, in range.
     pub fn sanitized(self) -> Reflection {
@@ -273,16 +300,25 @@ impl Shadow {
             "offsetTop" => 270.0,
             "offsetTopRight" => 315.0,
             "offsetRight" => 0.0,
-            "offsetCenter" => return Some(Shadow { distance: 0.0, blur: 5.0, ..d }),
-            // flattened behind the shape, leaning back left or right; under it; or turned down
-            // in front of it, leaning
-            "perspectiveUpperLeft" => return Some(Shadow { distance: 0.0, blur: 6.0, scale_y: 23.0, skew_x: -45.0, transparency: 70.0, ..d }),
-            "perspectiveUpperRight" => return Some(Shadow { distance: 0.0, blur: 6.0, scale_y: 23.0, skew_x: 45.0, transparency: 70.0, ..d }),
-            "perspectiveBelow" => {
-                return Some(Shadow { distance: 6.0, angle: 90.0, blur: 8.0, scale_y: -15.0, skew_x: 0.0, transparency: 75.0, ..d });
+            // all round, 2% larger
+            "offsetCenter" => return Some(Shadow { distance: 0.0, angle: 0.0, blur: 5.0, scale_x: 102.0, scale_y: 102.0, ..d }),
+            // as Word saves them: flattened behind the shape, leaning back left or right; under
+            // it; or turned down in front of it, leaning
+            "perspectiveUpperLeft" => {
+                return Some(Shadow { distance: 0.0, angle: 225.0, blur: 6.0, scale_y: 23.0, skew_x: 20.0, transparency: 80.0, ..d });
             }
-            "perspectiveLowerLeft" => return Some(Shadow { distance: 0.0, blur: 6.0, scale_y: -23.0, skew_x: 45.0, transparency: 70.0, ..d }),
-            "perspectiveLowerRight" => return Some(Shadow { distance: 0.0, blur: 6.0, scale_y: -23.0, skew_x: -45.0, transparency: 70.0, ..d }),
+            "perspectiveUpperRight" => {
+                return Some(Shadow { distance: 0.0, angle: 315.0, blur: 6.0, scale_y: 23.0, skew_x: -20.0, transparency: 80.0, ..d });
+            }
+            "perspectiveBelow" => {
+                return Some(Shadow { distance: 25.0, angle: 90.0, blur: 12.0, scale_x: 90.0, scale_y: -19.0, skew_x: 0.0, transparency: 85.0, ..d });
+            }
+            "perspectiveLowerLeft" => {
+                return Some(Shadow { distance: 1.0, angle: 135.0, blur: 6.0, scale_y: -23.0, skew_x: 13.34, transparency: 80.0, ..d });
+            }
+            "perspectiveLowerRight" => {
+                return Some(Shadow { distance: 1.0, angle: 45.0, blur: 6.0, scale_y: -23.0, skew_x: -13.34, transparency: 80.0, ..d });
+            }
             _ => return None,
         };
         Some(Shadow { angle, ..d })
@@ -297,21 +333,22 @@ impl Shadow {
             distance: clamp(self.distance, 0.0, MAX_DISTANCE, 0.0),
             angle: if angle.is_finite() && angle < 360.0 { angle } else { 0.0 },
             rot_with_shape: self.rot_with_shape,
-            scale_y: clamp(self.scale_y, -100.0, 100.0, 100.0),
+            scale_y: clamp(self.scale_y, -200.0, 200.0, 100.0),
+            scale_x: clamp(self.scale_x, -200.0, 200.0, 100.0),
             skew_x: clamp(self.skew_x, -80.0, 80.0, 0.0),
         }
     }
-    /// Flattened or leaning (a perspective shadow).
+    /// Flattened, stretched unevenly or leaning (a perspective shadow).
     pub fn is_perspective(&self) -> bool {
         let s = self.sanitized();
-        s.scale_y != 100.0 || s.skew_x != 0.0
+        s.scale_y != s.scale_x || s.skew_x != 0.0
     }
-    /// Where point (`x`, `y`) of a shape whose bottom edge is at `bottom` lands in its perspective
-    /// shadow (before the shadow's offset).
-    pub fn project(&self, x: f32, y: f32, bottom: f32) -> (f32, f32) {
+    /// Where point (`x`, `y`) of a shape whose bottom edge is at `bottom` and middle at `cx`
+    /// lands in its perspective shadow (before the shadow's offset).
+    pub fn project(&self, x: f32, y: f32, cx: f32, bottom: f32) -> (f32, f32) {
         let s = self.sanitized();
         let y2 = bottom + (y - bottom) * s.scale_y / 100.0;
-        (x + (bottom - y2) * s.skew_x.to_radians().tan(), y2)
+        (cx + (x - cx) * s.scale_x / 100.0 + (y2 - bottom) * s.skew_x.to_radians().tan(), y2)
     }
     /// The shadow's offset from the shape, points (x right, y down).
     pub fn offset(&self) -> (f32, f32) {
@@ -447,15 +484,19 @@ mod tests {
             assert!(s.is_perspective(), "{id}");
         }
         assert!(!Shadow::preset("offsetTop").unwrap().is_perspective());
-        // the top-left inner shadow: the outside moves down and right
+        // the top-left inner shadow points up and left, to the edges it darkens
         let (dx, dy) = InnerShadow::preset("insideTopLeft").unwrap().offset();
-        assert!(dx > 0.0 && dy > 0.0);
-        // flattened from the bottom edge, leaning right
+        assert!(dx < 0.0 && dy < 0.0);
+        // flattened from the bottom edge, leaning left (a positive lean, as DrawingML's kx)
         let s = Shadow { scale_y: 50.0, skew_x: 45.0, ..Shadow::default() };
-        let (x, y) = s.project(0.0, 0.0, 100.0);
+        let (x, y) = s.project(0.0, 0.0, 0.0, 100.0);
         assert_eq!(y, 50.0);
-        assert!((x - 50.0).abs() < 0.01);
-        assert_eq!(s.project(10.0, 100.0, 100.0), (10.0, 100.0), "the bottom edge stays");
+        assert!((x + 50.0).abs() < 0.01);
+        assert_eq!(s.project(10.0, 100.0, 0.0, 100.0), (10.0, 100.0), "the bottom edge stays");
+        // narrowed about the middle; an even scale is no perspective
+        let below = Shadow::preset("perspectiveBelow").unwrap();
+        assert_eq!(below.project(100.0, 100.0, 50.0, 100.0), (95.0, 100.0));
+        assert!(!Shadow::preset("offsetCenter").unwrap().is_perspective());
     }
 
     #[test]
@@ -466,8 +507,9 @@ mod tests {
         assert_eq!(Reflection::preset("half"), None);
         let (tight, full8) = (Reflection::preset("tightTouching").unwrap(), Reflection::preset("full8pt").unwrap());
         assert!(tight.size < full8.size && full8.distance == 8.0);
+        assert_eq!((tight.start, full8.size, full8.end), (52.0, 92.0, 0.295));
         let e = ShapeEffects { reflection: Some(full8), ..Default::default() };
         assert_eq!(e.extent(), [0.0; 4], "the extent of the shadow and glow alone");
-        assert_eq!(e.extent_for(100.0)[3], 98.0);
+        assert_eq!(e.extent_for(100.0)[3], 100.0);
     }
 }

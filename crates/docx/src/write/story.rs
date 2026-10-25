@@ -1590,8 +1590,17 @@ fn effect_list(w: &mut W, effects: &ShapeEffects) {
         w.close("a:glow");
     }
     if let Some(s) = fx.inner_shadow {
-        let dir = n((s.angle * 60_000.0).round() as i64);
-        w.open("a:innerShdw", &[("blurRad", &emu(s.blur)), ("dist", &emu(s.distance)), ("dir", &dir)]);
+        // as Word writes them: no distance or direction when it is 0
+        let (dist, dir) = (emu(s.distance), n((s.angle * 60_000.0).round() as i64));
+        let blur = emu(s.blur);
+        let mut attrs: Vec<(&str, &str)> = vec![("blurRad", &blur)];
+        if s.distance != 0.0 {
+            attrs.push(("dist", &dist));
+        }
+        if s.angle != 0.0 {
+            attrs.push(("dir", &dir));
+        }
+        w.open("a:innerShdw", &attrs);
         color(w, s.color, s.transparency);
         w.close("a:innerShdw");
     }
@@ -1612,14 +1621,37 @@ fn effect_list(w: &mut W, effects: &ShapeEffects) {
             (_, _, _, true) => "r",
             _ => "ctr",
         };
-        let (sy, kx) = (n((s.scale_y * 1000.0).round() as i64), n((s.skew_x * 60_000.0).round() as i64));
-        let mut attrs: Vec<(&str, &str)> = vec![("blurRad", &emu_blur), ("dist", &emu_dist), ("dir", &dir)];
-        if s.is_perspective() {
-            // flattened from the bottom edge
+        let (sx, sy, kx) = (n((s.scale_x * 1000.0).round() as i64), n((s.scale_y * 1000.0).round() as i64), n((s.skew_x * 60_000.0).round() as i64));
+        // as Word writes them: no distance or direction when it is 0, the scales and lean only
+        // when they change anything
+        let mut attrs: Vec<(&str, &str)> = vec![("blurRad", &emu_blur)];
+        if s.distance != 0.0 {
+            attrs.push(("dist", &emu_dist));
+        }
+        if s.angle != 0.0 {
+            attrs.push(("dir", &dir));
+        }
+        if s.scale_x != 100.0 {
+            attrs.push(("sx", &sx));
+        }
+        if s.scale_y != 100.0 {
             attrs.push(("sy", &sy));
+        }
+        if s.skew_x != 0.0 {
             attrs.push(("kx", &kx));
-            attrs.push(("algn", "b"));
+        }
+        // a perspective shadow is flattened from the bottom corner it leans away from (the
+        // bottom's middle when it doesn't lean, which Word leaves unsaid)
+        let algn = if s.is_perspective() {
+            match s.skew_x {
+                k if k > 0.0 => "br",
+                k if k < 0.0 => "bl",
+                _ => "b",
+            }
         } else {
+            algn
+        };
+        if algn != "b" {
             attrs.push(("algn", algn));
         }
         attrs.push(("rotWithShape", if s.rot_with_shape { "1" } else { "0" }));
@@ -1630,20 +1662,18 @@ fn effect_list(w: &mut W, effects: &ShapeEffects) {
     if let Some(r) = fx.reflection {
         let pct = |v: f32| n((v * 1000.0).round() as i64);
         // mirrored (`sy` -100%) below the bottom edge (`dir` 90°), scaled from the bottom left
-        w.empty(
-            "a:reflection",
-            &[
-                ("blurRad", &emu(r.blur)),
-                ("stA", &pct(r.start)),
-                ("endA", &pct(r.end)),
-                ("endPos", &pct(r.size)),
-                ("dist", &emu(r.distance)),
-                ("dir", "5400000"),
-                ("sy", "-100000"),
-                ("algn", "bl"),
-                ("rotWithShape", "0"),
-            ],
-        );
+        // as Word writes them: no end opacity or distance when it is 0
+        let (blur, start, end, size, dist) = (emu(r.blur), pct(r.start), pct(r.end), pct(r.size), emu(r.distance));
+        let mut attrs: Vec<(&str, &str)> = vec![("blurRad", &blur), ("stA", &start)];
+        if r.end != 0.0 {
+            attrs.push(("endA", &end));
+        }
+        attrs.push(("endPos", &size));
+        if r.distance != 0.0 {
+            attrs.push(("dist", &dist));
+        }
+        attrs.extend([("dir", "5400000"), ("sy", "-100000"), ("algn", "bl"), ("rotWithShape", "0")]);
+        w.empty("a:reflection", &attrs);
     }
     if let Some(r) = fx.soft_edge {
         w.empty("a:softEdge", &[("rad", &emu(r))]);

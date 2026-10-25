@@ -8092,8 +8092,8 @@ fn pictures_take_reflections() {
     };
     let InlineObject::Image { effects, float, h, .. } = obj(&s.doc) else { panic!() };
     let r = effects.reflection.expect("a reflection");
-    assert_eq!((r.size, r.distance), (90.0, 8.0));
-    assert!((float.effect[3] - (8.0 + 0.9 * h)).abs() < 0.01, "room below for it: {:?}", float.effect);
+    assert_eq!((r.size, r.distance), (92.0, 8.0));
+    assert!((float.effect[3] - (8.0 + 0.92 * h)).abs() < 0.01, "room below for it: {:?}", float.effect);
     let l = s.layout();
     let draws = page_display(&s.doc, &l.pages[0], &DisplayOptions::default());
     let picture = draws.iter().find_map(|d| if let Draw::Image { rect, .. } = d { Some(*rect) } else { None }).unwrap();

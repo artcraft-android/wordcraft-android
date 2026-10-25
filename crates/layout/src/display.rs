@@ -1643,22 +1643,22 @@ fn picture_effects(segs: Vec<PathSeg>, rect: Rect, effects: wordcraft_doc::effec
     }
     match effects.shadow.filter(|s| s.is_perspective()) {
         Some(sh) => {
-            let bottom = rect.bottom();
+            let (cx, bottom) = (rect.x + rect.w / 2.0, rect.bottom());
             let flat: Vec<PathSeg> = segs
                 .iter()
                 .map(|s| match *s {
                     PathSeg::Move(x, y) => {
-                        let (x, y) = sh.project(x, y, bottom);
+                        let (x, y) = sh.project(x, y, cx, bottom);
                         PathSeg::Move(x, y)
                     }
                     PathSeg::Line(x, y) => {
-                        let (x, y) = sh.project(x, y, bottom);
+                        let (x, y) = sh.project(x, y, cx, bottom);
                         PathSeg::Line(x, y)
                     }
                     other => other,
                 })
                 .collect();
-            let plain = wordcraft_doc::effects::Shadow { scale_y: 100.0, skew_x: 0.0, ..sh };
+            let plain = wordcraft_doc::effects::Shadow { scale_y: 100.0, scale_x: 100.0, skew_x: 0.0, ..sh };
             let mut out = vec![Draw::Effects {
                 segs: flat,
                 effects: wordcraft_doc::effects::ShapeEffects { shadow: Some(plain), ..Default::default() },
@@ -1692,8 +1692,9 @@ fn inner_shadow_draws(rect: Rect, effects: &wordcraft_doc::effects::ShapeEffects
     let bands = wordcraft_doc::effects::bands(-s.blur / 2.0, s.blur / 2.0, s.opacity())
         .into_iter()
         .filter_map(|(g, a)| {
-            // the inside left lit: the frame shrunk by the band's step, moved
-            let lit = frame_polys(framing, Rect::new(rect.x + dx + g, rect.y + dy + g, rect.w - 2.0 * g, rect.h - 2.0 * g));
+            // the inside left lit: the frame shrunk by the band's step, moved against the
+            // shadow's direction, so the edges it points to darken
+            let lit = frame_polys(framing, Rect::new(rect.x - dx + g, rect.y - dy + g, rect.w - 2.0 * g, rect.h - 2.0 * g));
             if lit.is_empty() {
                 return None;
             }

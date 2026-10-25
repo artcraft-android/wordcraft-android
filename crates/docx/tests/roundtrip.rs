@@ -1974,6 +1974,91 @@ fn ink_and_freeforms_round_trip_as_custom_geometry() {
     assert_eq!(objs[2], pen, "the pen stroke comes back point for point");
 }
 
+/// Picture Effects' presets are written as Word saves them (read from its own saved documents):
+/// the perspective shadows' lean, scale and corner, the centred shadow's 102%, the inner shadows
+/// pointing at the edges they darken, the reflections' fade.
+#[test]
+fn effect_presets_written_as_word_writes_them() {
+    use wordcraft_doc::effects::{InnerShadow, Reflection, Shadow, ShapeEffects};
+    let written = |effects: ShapeEffects| {
+        let shape = InlineObject::Shape {
+            kind: ShapeKind::Rectangle,
+            w: 100.0,
+            h: 50.0,
+            fill: Some(Rgb(0x15, 0x60, 0x82)),
+            stroke: None,
+            stroke_width: 0.0,
+            float: Float::default(),
+            story: None,
+            freeform: None,
+            effects,
+            extra: Default::default(),
+        };
+        let mut p = Paragraph::with_text("x", CharProps::default());
+        p.insert_object(1, shape, &CharProps::default()).unwrap();
+        let bytes = wordcraft_docx::write(&doc_with(vec![p])).expect("write");
+        let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&bytes)).unwrap();
+        let mut xml = String::new();
+        std::io::Read::read_to_string(&mut zip.by_name("word/document.xml").unwrap(), &mut xml).unwrap();
+        xml
+    };
+    for (preset, tag) in [
+        ("perspectiveUpperLeft", r#"<a:outerShdw blurRad="76200" dir="13500000" sy="23000" kx="1200000" algn="br" rotWithShape="0">"#),
+        ("perspectiveUpperRight", r#"<a:outerShdw blurRad="76200" dir="18900000" sy="23000" kx="-1200000" algn="bl" rotWithShape="0">"#),
+        ("perspectiveBelow", r#"<a:outerShdw blurRad="152400" dist="317500" dir="5400000" sx="90000" sy="-19000" rotWithShape="0">"#),
+        ("perspectiveLowerLeft", r#"<a:outerShdw blurRad="76200" dist="12700" dir="8100000" sy="-23000" kx="800400" algn="br" rotWithShape="0">"#),
+        ("perspectiveLowerRight", r#"<a:outerShdw blurRad="76200" dist="12700" dir="2700000" sy="-23000" kx="-800400" algn="bl" rotWithShape="0">"#),
+        ("offsetCenter", r#"<a:outerShdw blurRad="63500" sx="102000" sy="102000" algn="ctr" rotWithShape="0">"#),
+        ("offsetRight", r#"<a:outerShdw blurRad="50800" dist="38100" algn="l" rotWithShape="0">"#),
+        ("offsetTop", r#"<a:outerShdw blurRad="50800" dist="38100" dir="16200000" rotWithShape="0">"#),
+    ] {
+        let xml = written(ShapeEffects { shadow: Shadow::preset(preset), ..Default::default() });
+        assert!(xml.contains(tag), "{preset}: {xml}");
+    }
+    for (preset, tag) in [
+        ("insideTopLeft", r#"<a:innerShdw blurRad="63500" dist="101600" dir="13500000">"#),
+        ("insideRight", r#"<a:innerShdw blurRad="63500" dist="101600">"#),
+        ("insideBottomRight", r#"<a:innerShdw blurRad="63500" dist="101600" dir="2700000">"#),
+        ("insideCenter", r#"<a:innerShdw blurRad="114300">"#),
+    ] {
+        let xml = written(ShapeEffects { inner_shadow: InnerShadow::preset(preset), ..Default::default() });
+        assert!(xml.contains(tag), "{preset}: {xml}");
+    }
+    for (preset, tag) in [
+        (
+            "tightTouching",
+            r#"<a:reflection blurRad="6350" stA="52000" endA="300" endPos="35000" dir="5400000" sy="-100000" algn="bl" rotWithShape="0"/>"#,
+        ),
+        (
+            "tight4pt",
+            r#"<a:reflection blurRad="6350" stA="50000" endA="300" endPos="38500" dist="50800" dir="5400000" sy="-100000" algn="bl" rotWithShape="0"/>"#,
+        ),
+        (
+            "tight8pt",
+            r#"<a:reflection blurRad="6350" stA="50000" endA="275" endPos="40000" dist="101600" dir="5400000" sy="-100000" algn="bl" rotWithShape="0"/>"#,
+        ),
+        (
+            "halfTouching",
+            r#"<a:reflection blurRad="6350" stA="50000" endA="300" endPos="55000" dir="5400000" sy="-100000" algn="bl" rotWithShape="0"/>"#,
+        ),
+        (
+            "half8pt",
+            r#"<a:reflection blurRad="6350" stA="50000" endA="300" endPos="55500" dist="101600" dir="5400000" sy="-100000" algn="bl" rotWithShape="0"/>"#,
+        ),
+        (
+            "fullTouching",
+            r#"<a:reflection blurRad="6350" stA="50000" endA="300" endPos="90000" dir="5400000" sy="-100000" algn="bl" rotWithShape="0"/>"#,
+        ),
+        (
+            "full8pt",
+            r#"<a:reflection blurRad="6350" stA="50000" endA="295" endPos="92000" dist="101600" dir="5400000" sy="-100000" algn="bl" rotWithShape="0"/>"#,
+        ),
+    ] {
+        let xml = written(ShapeEffects { reflection: Reflection::preset(preset), ..Default::default() });
+        assert!(xml.contains(tag), "{preset}: {xml}");
+    }
+}
+
 /// Shape effects (#275): `a:effectLst` with an outer shadow, a glow and soft edges round-trips,
 /// and the effect extent leaves room for them.
 #[test]
@@ -2022,15 +2107,15 @@ fn shape_effects_round_trip() {
     assert!(xml.contains(r#"<a:glow rad="101600"><a:srgbClr val="C05010"><a:alpha val="60000"/>"#), "{xml}");
     assert!(xml.contains(r#"<a:softEdge rad="31750"/>"#), "{xml}");
     // the reflection between the shadow and the soft edges (schema order), mirrored below
-    assert!(xml.contains(r#"<a:reflection blurRad="6350" stA="52000" endA="300" endPos="55000" dist="50800" dir="5400000" sy="-100000""#), "{xml}");
+    assert!(xml.contains(r#"<a:reflection blurRad="6350" stA="50000" endA="300" endPos="55500" dist="50800" dir="5400000" sy="-100000""#), "{xml}");
     assert!(xml.find("<a:outerShdw") < xml.find("<a:reflection") && xml.find("<a:reflection") < xml.find("<a:softEdge"));
     let r = wordcraft_docx::read(&bytes).expect("read");
     match paras(&r)[0].objects.first() {
         Some(InlineObject::Shape { effects: got, float, .. }) => {
             assert_eq!(*got, effects);
-            // room below for the reflection: 4 pt away, 55% of the 50 pt shape
+            // room below for the reflection: 4 pt away, 55.5% of the 50 pt shape
             assert_eq!(float.effect_extent(), effects.extent_for(50.0));
-            assert_eq!(float.effect_extent()[3], 31.5);
+            assert_eq!(float.effect_extent()[3], 31.75);
         }
         o => panic!("{o:?}"),
     }
