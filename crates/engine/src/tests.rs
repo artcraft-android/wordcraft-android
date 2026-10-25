@@ -7791,8 +7791,10 @@ fn pictures_take_shadows_and_glows() {
     let l = s.layout();
     let draws = page_display(&s.doc, &l.pages[0], &DisplayOptions::default());
     let at = |f: &dyn Fn(&Draw) -> bool| draws.iter().position(f).unwrap();
-    // the picture fading at its soft edge: in steps inside one clip
-    assert!(at(&|d| matches!(d, Draw::Effects { .. })) < at(&|d| matches!(d, Draw::ClipPath { .. })), "behind the picture");
+    // the picture fading at its soft edge: in steps inside one clip; its shadow and glow behind
+    // it, in their own colours on a dark page
+    let shadows = |d: &Draw| matches!(d, Draw::Kept { items } if items.iter().all(|i| matches!(i, Draw::Effects { .. })));
+    assert!(at(&shadows) < at(&|d| matches!(d, Draw::ClipPath { .. })), "behind the picture");
     let bytes = crate::io::save_bytes("p.docx", &s.doc).unwrap();
     let back = crate::io::open_bytes("p.docx", &bytes).unwrap();
     let b = fx(&back);
@@ -8137,11 +8139,17 @@ fn pictures_take_inner_and_perspective_shadows() {
         Draw::Image { rect, .. } => *rect,
         o => panic!("{o:?}"),
     };
-    // the inner shadow over the picture, inside its frame
-    assert!(draws[image..].iter().any(|d| matches!(d, Draw::Clip { rect: r, .. } if *r == rect)), "{draws:?}");
+    // the inner shadow over the picture, inside its frame (in the picture's own colours on a
+    // dark page)
+    let kept = |d: &Draw| match d {
+        Draw::Kept { items } => items.clone(),
+        other => vec![other.clone()],
+    };
+    assert!(draws[image..].iter().flat_map(kept).any(|d| matches!(d, Draw::Clip { rect: r, .. } if r == rect)), "{draws:?}");
     // the perspective shadow behind it, flattened: no higher than a quarter of the picture
     let shadow_top = draws[..image]
         .iter()
+        .flat_map(kept)
         .find_map(|d| match d {
             Draw::Effects { segs, .. } => segs
                 .iter()

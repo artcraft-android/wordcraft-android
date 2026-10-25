@@ -96,6 +96,9 @@ pub enum Draw {
     /// its silhouette `segs` (grown with [`grown_segs`]), filled, or stroked `stroke_width` wide
     /// when the drawing is only lines (an arc, a bracket). For a preset shape or a picture.
     Effects { segs: Vec<PathSeg>, effects: wordcraft_doc::effects::ShapeEffects, filled: bool, stroke_width: f32 },
+    /// Draws a dark page leaves in the document's colours, as the reference leaves a picture's
+    /// shadow, glow and inner shadow (the picture itself keeps its colours too).
+    Kept { items: Vec<Draw> },
     /// A chart or diagram's draws, as one figure: an inline one's with its alt text (for tagged
     /// PDF; a floating one tags itself). A dark page leaves its colours as they are.
     Figure { alt: String, kind: GraphicKind, draws: Vec<Draw> },
@@ -1596,8 +1599,9 @@ fn preset_draws(
     }
 }
 
-/// How many strips a reflection fades in.
-const REFLECTION_STRIPS: usize = 12;
+/// How many strips a reflection fades in: about one for each 2 points of its length, between
+/// these (fewer show as steps where the reference's fade is smooth).
+const REFLECTION_STRIPS: (usize, usize) = (12, 48);
 
 /// `items` (a picture or shape drawn in `rect`, its effects first) and then its reflection, if
 /// its `effects` have one: the drawing (not its shadow or glow) mirrored about a line half the
@@ -1609,11 +1613,18 @@ fn reflected(rect: Rect, effects: &wordcraft_doc::effects::ShapeEffects, mut ite
     if !(len > 0.0 && rect.w > 0.0) {
         return items;
     }
-    let body: Vec<Draw> = items.iter().filter(|d| !matches!(d, Draw::Effects { .. })).cloned().collect();
+    // the drawing without its shadows and glow (they aren't reflected; an inner shadow is)
+    let shadow = |d: &Draw| match d {
+        Draw::Effects { .. } => true,
+        Draw::Kept { items } => items.iter().all(|i| matches!(i, Draw::Effects { .. })),
+        _ => false,
+    };
+    let body: Vec<Draw> = items.iter().filter(|d| !shadow(d)).cloned().collect();
     let mirrored = Draw::Rotated { cx: rect.x + rect.w / 2.0, cy: rect.bottom() + r.distance / 2.0, spin: Spin::new(0.0, false, true), items: body };
     let top = rect.bottom() + r.distance;
-    let n = REFLECTION_STRIPS as f32;
-    for k in 0..REFLECTION_STRIPS {
+    let strips = ((len / 2.0).ceil() as usize).clamp(REFLECTION_STRIPS.0, REFLECTION_STRIPS.1);
+    let n = strips as f32;
+    for k in 0..strips {
         let (a, b) = (k as f32 / n, (k + 1) as f32 / n);
         let alpha = (r.start + (r.end - r.start) * (a + b) / 2.0) / 100.0;
         // a little wider than the drawing, for its outline
@@ -1773,7 +1784,8 @@ fn picture_draws(
 ) -> Vec<Draw> {
     let framing = framing.sanitized();
     let outer = grown(rect, framing.reach());
-    let mut items = picture_effects(poly_segs(&frame_polys(&framing, outer), false), outer, fx);
+    let shadows = picture_effects(poly_segs(&frame_polys(&framing, outer), false), outer, fx);
+    let mut items = if shadows.is_empty() { Vec::new() } else { vec![Draw::Kept { items: shadows }] };
     let (media, svg) = media;
     let image = Draw::Image { rect, media: media.to_string(), svg: svg.map(str::to_string), crop, alpha, alt: alt.to_string() };
     let cut = poly_segs(&frame_polys(&framing, rect), false);
@@ -1798,7 +1810,10 @@ fn picture_draws(
         None if framing.shape.is_some() => items.push(Draw::ClipPath { segs: cut, items: vec![image] }),
         None => items.push(image),
     }
-    items.extend(inner_shadow_draws(rect, effects, &framing));
+    let inner = inner_shadow_draws(rect, effects, &framing);
+    if !inner.is_empty() {
+        items.push(Draw::Kept { items: inner });
+    }
     if let Some(line) = framing.line {
         items.extend(outline_draws(rect, line, &framing));
     }

@@ -712,6 +712,13 @@ fn draw(ctx: &mut RenderContext, doc: &Document, it: &Draw, view: Affine, visibl
                 draw(ctx, doc, d, view, visible, opts);
             }
         }
+        // a picture's shadows keep their colours on a dark page, as the picture does
+        Draw::Kept { items } => {
+            let kept = RenderOptions { dark: false, ..opts.clone() };
+            for d in items {
+                draw(ctx, doc, d, view, visible, &kept);
+            }
+        }
         Draw::Fill { rect, color: c, alpha, text_bg } => {
             let r = kurbo::Rect::new(rect.x as f64, rect.y as f64, rect.right() as f64, rect.bottom() as f64);
             if !r.overlaps(*visible) {

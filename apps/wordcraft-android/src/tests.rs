@@ -385,6 +385,24 @@ fn dark_pages_are_near_black_with_light_text() {
 }
 
 #[test]
+fn a_picture_s_shadow_stays_dark_on_a_dark_page() {
+    let m = MobileSession::default();
+    let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+    m.execute("insert.picture".into(), json!({ "data": png, "width": 100 }).to_string()).unwrap();
+    m.set_dark(true);
+    let plain = m.render_page(0, 1.0).unwrap();
+    m.execute("shape.effects".into(), json!({ "shadow": "offsetBottomRight" }).to_string()).unwrap();
+    let shadowed = m.render_page(0, 1.0).unwrap();
+    let (a, _) = plain.rgba.as_chunks::<4>();
+    let (b, _) = shadowed.rgba.as_chunks::<4>();
+    let sum = |p: &[u8; 4]| p[0] as i32 + p[1] as i32 + p[2] as i32;
+    // as the reference keeps a picture's shadow black on its dark page: it only darkens (and
+    // little, the page being near black already)
+    assert!(a.iter().zip(b).all(|(x, y)| sum(y) <= sum(x) + 6), "a shadow lightened the page");
+    assert!(a.iter().zip(b).any(|(x, y)| sum(y) + 9 < sum(x)), "no shadow drawn");
+}
+
+#[test]
 fn find_view_marks_every_match_and_the_selected_one() {
     let m = MobileSession::default();
     m.type_text("one cat, two cats, red cat".into()).unwrap();

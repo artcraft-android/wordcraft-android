@@ -921,7 +921,7 @@ impl Exporter<'_> {
 
     fn draw(&mut self, s: &mut Surface, d: &Draw) {
         match d {
-            Draw::Figure { draws, .. } => {
+            Draw::Figure { draws, .. } | Draw::Kept { items: draws } => {
                 for d in draws {
                     self.draw(s, d);
                 }
