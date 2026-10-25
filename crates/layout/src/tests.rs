@@ -3832,7 +3832,7 @@ fn a_floating_table_ignores_a_paragraphs_empty_lines() {
 
     let mut doc = Document::from_text(&[""; 9].join("\n"));
     doc.body.push(wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text("Visible\n\n\n", Default::default())));
-    doc.body.extend((0..14).map(|_| wordcraft_doc::para_block(wordcraft_doc::Paragraph::new())));
+    doc.body.extend((0..13).map(|_| wordcraft_doc::para_block(wordcraft_doc::Paragraph::new())));
     let mut table = Table::new(12, 1, 300.0);
     for (i, row) in table.rows.iter_mut().enumerate() {
         row.cells[0].blocks = vec![wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text(&format!("Approval {i}"), Default::default()))];
@@ -6431,6 +6431,22 @@ fn highlight_fill_is_marked_as_a_text_background() {
         .collect();
     assert!(glyphs.iter().any(|(t, bg)| t.contains("Marked") && *bg == yellow), "{glyphs:?}");
     assert!(glyphs.iter().any(|(t, bg)| t.contains("Plain") && bg.is_none()), "{glyphs:?}");
+}
+
+/// A highlighted run is one fill from its first letter to its last (letter by letter, the edges
+/// between them showed as seams).
+#[test]
+fn a_highlighted_run_is_one_fill() {
+    use wordcraft_doc::props::Highlight;
+    let cp = wordcraft_doc::CharProps { highlight: Some(Highlight::Yellow), ..Default::default() };
+    let mut d = Document::from_text("x");
+    d.body = vec![wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text("HHHH marked", cp))];
+    let l = lay(&d);
+    let items = display::page_display(&d, &l.pages[0], &display::DisplayOptions::default());
+    let fills: Vec<f32> =
+        items.iter().filter_map(|i| if let display::Draw::Fill { rect, text_bg: true, .. } = i { Some(rect.w) } else { None }).collect();
+    assert_eq!(fills.len(), 1, "{fills:?}");
+    assert!(fills[0] > 40.0, "{fills:?}");
 }
 
 /// #1252 review: an underline and strikethrough on a highlighted run carry the highlight, like

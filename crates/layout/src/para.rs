@@ -696,7 +696,8 @@ impl<'a> Builder<'a> {
 
     /// Style index for a resolved char in `face` (caps-scaled `size` override for small caps).
     fn style(&mut self, rc: &Arc<ResolvedChar>, face_override: Option<FaceRef>, small: bool) -> u32 {
-        let r = wordcraft_fonts::word::resolve(lookup_family(self.env.doc, &rc.font), rc.bold, rc.italic);
+        let family = lookup_family(self.env.doc, &rc.font);
+        let r = wordcraft_fonts::word::resolve(family, rc.bold, rc.italic);
         let face = face_override.unwrap_or(r.face);
         // The display list reads every run's format (link target, strike kind, underline colour,
         // baseline shift…) from its StyleRun, so runs share one only when their formats are equal.
@@ -722,7 +723,11 @@ impl<'a> Builder<'a> {
             }
         }
         let size = rc.draw_size() * if small { 0.8 } else { 1.0 };
-        let (a, d) = wordcraft_fonts::word::line_metrics(&face);
+        // a face standing in for the requested font keeps that font's line spacing
+        let (a, d) = match face_override {
+            None => wordcraft_fonts::word::line_metrics_for(family, r.substituted, &face),
+            Some(_) => wordcraft_fonts::word::line_metrics(&face),
+        };
         let k = size as f64 / face.upem.max(1.0);
         // A fallback face (letters the requested font lacks) is emboldened or slanted when it has
         // no bold or italic of its own.
@@ -1541,8 +1546,7 @@ pub fn layout_para(p: &Paragraph, env: &ParaEnv) -> ParaLayout {
         for c in &cl {
             style = c.style;
             if let Some(st) = b.styles.get(style as usize) {
-                let a = wordcraft_fonts::word::line_metrics(&st.face).0 * st.size as f64 / st.face.upem.max(1.0);
-                ascent = ascent.max(a as f32 + st.shift.max(0.0));
+                ascent = ascent.max(st.ascent + st.shift.max(0.0));
             }
             let g0 = glyphs.len();
             for g in b.glyphs.get(c.g0 as usize..c.g1 as usize).into_iter().flatten() {

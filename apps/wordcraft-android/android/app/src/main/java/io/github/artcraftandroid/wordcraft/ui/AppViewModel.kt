@@ -39,12 +39,18 @@ enum class ViewMode { Print, Mobile }
 
 /**
  * Mobile View draws the reflowed text this large: dp on screen per point of the document, as the
- * reference app's reflowed view measures on the phone.
+ * reference app's reflowed view measures on the phone (36 pt of paragraph spacing over 60.1 dp).
  */
-const val MOBILE_DP_PER_PT = 1.7f
+const val MOBILE_DP_PER_PT = 1.67f
 
 /** Mobile View's white margin each side of the reflowed text (points), on top of the engine's own. */
 const val MOBILE_PAD_PT = 5f
+
+/**
+ * Mobile View's room above the text (points): the phone app starts it about 8.6 pt under the bar,
+ * so the reflowed page's 18 pt top margin is partly hidden.
+ */
+const val MOBILE_TOP_PT = -9.4f
 
 /** What separates the words Read Aloud counts. */
 private val WORD_GAP = Regex("\\s+")

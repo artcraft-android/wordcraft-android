@@ -79,10 +79,11 @@ private const val MAX_ZOOM = 5f
  * middle of a column as wide as the widest page plus [pad] each side, [gap] apart. The screen
  * shows it at [scale] pixels per point, scrolled by ([scrollX], [scrollY]) points, centred
  * across when it is narrower than the view. Mobile View has no padding or gaps: its one page is
- * the screen's width.
+ * the screen's width. [padTop] is the room above the first page (less than none hides some of
+ * its top margin).
  */
 @Stable
-class DocumentViewport(private val pad: Float = 4f, private val gap: Float = 5.5f) {
+class DocumentViewport(private val pad: Float = 4f, private val gap: Float = 5.5f, private val padTop: Float = pad) {
     var scale by mutableFloatStateOf(0f)
         private set
     var scrollX by mutableFloatStateOf(0f)
@@ -112,7 +113,7 @@ class DocumentViewport(private val pad: Float = 4f, private val gap: Float = 5.5
         val maxW = list.maxOfOrNull { it.width + it.markup } ?: 612f
         contentW = maxW + 2 * pad
         tops = FloatArray(list.size)
-        var y = pad
+        var y = padTop
         list.forEachIndexed { i, p ->
             tops[i] = y
             y += p.height + gap
@@ -138,7 +139,7 @@ class DocumentViewport(private val pad: Float = 4f, private val gap: Float = 5.5
         return pad + (maxW - (p.width + p.markup)) / 2f
     }
 
-    fun pageTop(i: Int): Float = tops.getOrNull(i) ?: pad
+    fun pageTop(i: Int): Float = tops.getOrNull(i) ?: padTop
 
     fun toScreen(xPt: Float, yPt: Float): Offset = Offset((xPt - scrollX) * scale + shiftX(), (yPt - scrollY) * scale)
 

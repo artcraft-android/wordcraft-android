@@ -127,6 +127,25 @@ fn metric_twins(family: &str) -> &'static [&'static str] {
     }
 }
 
+/// The line metrics (ascent and descent, in ems) of a proprietary font that has no open twin, as
+/// the reference lays out its lines (measured from its highlight boxes): a font standing in for it
+/// keeps its line spacing.
+fn stand_in_line_metrics(family: &str) -> Option<(f64, f64)> {
+    match family.trim().to_ascii_lowercase().as_str() {
+        "aptos" => Some((0.970, 0.340)),
+        _ => None,
+    }
+}
+
+/// [`line_metrics`] for text asked in `family` and drawn in `face` (as [`resolve`] chose it): a
+/// face standing in for a font with known line metrics takes that font's.
+pub fn line_metrics_for(family: &str, substituted: bool, face: &crate::FontFace) -> (f64, f64) {
+    match stand_in_line_metrics(charset_base_family(family)).filter(|_| substituted) {
+        Some((a, d)) => (a * face.upem, d * face.upem),
+        None => line_metrics(face),
+    }
+}
+
 /// Whether an open font with `family`'s widths is installed (Liberation Serif for Times New Roman,
 /// Carlito for Calibri…): the document then lays out as it would with the font itself.
 pub fn has_metric_twin(family: &str) -> bool {
@@ -306,6 +325,17 @@ mod tests {
         assert_eq!(super::metric_twins("calibri "), &["Carlito"]);
         assert!(super::metric_twins("No Such Brand Font").is_empty());
         assert!(!super::has_metric_twin("No Such Brand Font"));
+    }
+
+    #[test]
+    fn a_face_standing_in_for_aptos_takes_its_line_spacing() {
+        let r = super::resolve("Source Serif 4", false, false);
+        let face = r.face.get();
+        let (a, d) = super::line_metrics_for("Aptos", true, face);
+        assert!(((a + d) / face.upem - 1.31).abs() < 1e-9, "{a} {d}");
+        // asked for itself, or a font with no known metrics: the face's own
+        assert_eq!(super::line_metrics_for("Aptos", false, face), super::line_metrics(face));
+        assert_eq!(super::line_metrics_for("Some Other Font", true, face), super::line_metrics(face));
     }
 
     use super::*;

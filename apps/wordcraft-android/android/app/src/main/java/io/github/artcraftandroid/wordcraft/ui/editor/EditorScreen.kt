@@ -93,7 +93,11 @@ fun EditorScreen(vm: AppViewModel) {
     val info = vm.info ?: return
     val mobile = vm.viewMode == ViewMode.Mobile
     val viewport = remember(info.documentId, mobile) {
-        if (mobile) DocumentViewport(pad = io.github.artcraftandroid.wordcraft.ui.MOBILE_PAD_PT, gap = 0f) else DocumentViewport(pad = 5f, gap = 12f)
+        if (mobile) {
+            DocumentViewport(pad = io.github.artcraftandroid.wordcraft.ui.MOBILE_PAD_PT, gap = 0f, padTop = io.github.artcraftandroid.wordcraft.ui.MOBILE_TOP_PT)
+        } else {
+            DocumentViewport(pad = 5f, gap = 12f)
+        }
     }
     var input by remember { mutableStateOf<EditorInputView?>(null) }
     val density = LocalDensity.current.density

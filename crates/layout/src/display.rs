@@ -720,16 +720,34 @@ fn lines(
                 }
             }
         }
-        // Backgrounds first: highlight and character shading; character borders group equal adjacent borders.
+        // Backgrounds first: highlight and character shading, each run of one colour a single
+        // fill (cluster by cluster, their edges would show as seams); character borders group
+        // equal adjacent borders.
         let mut open: Option<(Border, f32, f32)> = None;
+        let mut bg: Option<(Rgb, f32, f32)> = None;
+        // the borders over the fills
+        let mut boxes = Vec::new();
+        let fill_bg = |bg: Option<(Rgb, f32, f32)>, out: &mut Vec<Draw>| {
+            if let Some((color, x0, x1)) = bg {
+                out.push(Draw::Fill { rect: Rect::new(x0, top, (x1 - x0).max(0.0), line.height), color, alpha, text_bg: true });
+            }
+        };
         for k in line.c0..line.c1 {
             let (Some(c), Some(cx), Some(nx)) = (pl.clusters.get(k), line.cl_left(k), line.cl_right(k)) else { continue };
             let Some(st) = pl.styles.get(c.style as usize) else { continue };
             if c.kind == ClKind::Marker {
                 continue;
             }
-            if let Some(h) = st.rc.highlight.or(st.rc.shading) {
-                out.push(Draw::Fill { rect: Rect::new(x + cx, top, (nx - cx).max(0.0), line.height), color: h, alpha, text_bg: true });
+            match (st.rc.highlight.or(st.rc.shading), bg.as_mut()) {
+                // the same colour next to the last run (right-to-left text grows leftwards)
+                (Some(h), Some((color, x0, x1))) if *color == h && ((x + cx - *x1).abs() < 0.5 || (*x0 - (x + nx)).abs() < 0.5) => {
+                    *x0 = x0.min(x + cx);
+                    *x1 = x1.max(x + nx);
+                }
+                (h, _) => {
+                    fill_bg(bg.take(), out);
+                    bg = h.map(|h| (h, x + cx, x + nx));
+                }
             }
             let b = st.rc.border;
             if let Some((ob, x0, x1)) = open.as_mut()
@@ -741,13 +759,15 @@ fn lines(
                 continue;
             }
             if let Some((ob, x0, x1)) = open.take() {
-                char_box(&ob, x0, x1, top, bottom, alpha, out);
+                char_box(&ob, x0, x1, top, bottom, alpha, &mut boxes);
             }
             open = b.map(|b| (b, x + cx, x + nx));
         }
+        fill_bg(bg, out);
         if let Some((ob, x0, x1)) = open {
-            char_box(&ob, x0, x1, top, bottom, alpha, out);
+            char_box(&ob, x0, x1, top, bottom, alpha, &mut boxes);
         }
+        out.extend(boxes);
         // Label.
         if li == pl.label_line()
             && let Some(lab) = &pl.label
