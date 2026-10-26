@@ -55,6 +55,7 @@ val TAB_PANEL_TITLES = mapOf(
     "columns" to "Columns",
     "breaks" to "Breaks",
     "proofing" to "Proofing and Language",
+    "link" to "Link",
     "wordCount" to "Word Count",
     "deleteComment" to "Delete",
     "displayForReview" to "Display for Review",
@@ -80,6 +81,7 @@ fun TabPanel(vm: AppViewModel, panel: String): Boolean {
         "columns" -> ColumnsPanel(vm)
         "breaks" -> BreaksPanel(vm)
         "proofing" -> ProofingPanel(vm)
+        "link" -> LinkPanel(vm)
         "wordCount" -> WordCountPanel(vm)
         "deleteComment" -> SimpleChoices(listOf("Delete" to { vm.command("review.deleteComment") }, "Delete All Comments in Document" to { vm.command("review.deleteComment", json("all" to true)) }))
         "displayForReview" -> DisplayForReviewPanel(vm)
@@ -140,7 +142,7 @@ private fun InsertTab(vm: AppViewModel) {
         PaletteRow("Pictures", LucideIcons.Image.glyph(), onClick = { vm.pushPanel("pictures") }, chevron = true)
         PaletteRow("Shapes", LucideIcons.Shapes.glyph(), onClick = { vm.pushPanel("shapes") }, chevron = true)
         PaletteRow("Text Box", LucideIcons.TextCursorInput.glyph(), onClick = { vm.command("insert.textBox") })
-        PaletteRow("Link", LucideIcons.Link.glyph(), onClick = { vm.linkPane = true }, chevron = true)
+        PaletteRow("Link", LucideIcons.Link.glyph(), onClick = { vm.pushPanel("link") }, chevron = true)
         PaletteRow("Comment", LucideIcons.MessageSquarePlus.glyph(), onClick = { vm.commentsOpen = true })
         PaletteRow("Header & Footer", LucideIcons.PanelTop.glyph(), onClick = {
             vm.command("insert.editHeader")
@@ -161,9 +163,9 @@ private fun StepperRow(label: String, glyph: Glyph, value: Int, range: IntRange,
         GlyphIcon(glyph, WordColors.OnStrip)
         Spacer(Modifier.width(16.dp))
         Text(label, color = WordColors.OnSurface, fontSize = 16.sp, modifier = Modifier.weight(1f))
-        BarButton(Glyph.Letters("−"), WordColors.AccentLight, { onChange((value - 1).coerceIn(range)) }, enabled = value > range.first, width = 48.dp, height = ROW, iconSize = 30.dp)
+        BarButton(Glyph.Letters("−"), WordColors.AccentLight, { onChange((value - 1).coerceIn(range)) }, enabled = value > range.first, width = 48.dp, height = ROW, iconSize = 30.dp, label = "Decrease $label")
         Text("$value", color = WordColors.OnSurface, fontSize = 16.sp, modifier = Modifier.width(40.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        BarButton(Glyph.Letters("+"), WordColors.AccentLight, { onChange((value + 1).coerceIn(range)) }, enabled = value < range.last, width = 48.dp, height = ROW, iconSize = 30.dp)
+        BarButton(Glyph.Letters("+"), WordColors.AccentLight, { onChange((value + 1).coerceIn(range)) }, enabled = value < range.last, width = 48.dp, height = ROW, iconSize = 30.dp, label = "Increase $label")
         Spacer(Modifier.width(8.dp))
     }
 }
@@ -176,6 +178,20 @@ private fun WideButton(label: String, onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Text(label, color = Color.White, fontSize = 16.sp)
+    }
+}
+
+/** Link: Insert Link… (its pane), then the addresses linked lately, each a tap from linking again. */
+@Composable
+private fun LinkPanel(vm: AppViewModel) {
+    Scrolling {
+        PaletteRow("Insert Link...", LucideIcons.Link.glyph(), onClick = { vm.linkPane = true })
+        if (vm.recentLinks.isEmpty()) {
+            Text("No items available.", color = WordColors.Disabled, fontSize = 15.sp, modifier = Modifier.padding(16.dp))
+        }
+        for (address in vm.recentLinks) {
+            PaletteRow(address, LucideIcons.Link.glyph(), onClick = { vm.insertLink("", address) })
+        }
     }
 }
 
@@ -322,7 +338,7 @@ private val INK_COLORS = listOf(
 private fun InkColorPanel(vm: AppViewModel) {
     val current = if (vm.inkTool == "highlighter") vm.highlighterColor else vm.penColor
     Scrolling {
-        SwatchGrid(INK_COLORS.map { io.github.artcraftandroid.wordcraft.core.Swatch(it, it) }, perRow = 8, cellW = 61.dp, selected = current) { vm.setInkColor(it.hex) }
+        SwatchGrid(INK_COLORS.map { io.github.artcraftandroid.wordcraft.core.Swatch(it, it, "#$it") }, perRow = 8, cellW = 61.dp, selected = current) { vm.setInkColor(it.hex) }
     }
 }
 

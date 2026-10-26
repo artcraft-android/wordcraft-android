@@ -210,6 +210,8 @@ pub struct Swatch {
     pub name: String,
     /// `RRGGBB`.
     pub hex: String,
+    /// What a screen reader says for it ("Accent 1, Lighter 80%", "Dark Red", "Yellow").
+    pub label: String,
 }
 
 /// The colours the colour menus offer, as the desktop's menus have them: the document theme's
@@ -1364,25 +1366,50 @@ impl MobileSession {
     pub fn color_choices(&self) -> ColorChoices {
         use wordcraft_engine::doc::props::{Highlight, Rgb};
         let s = self.lock();
-        let swatch = |c: Rgb| Swatch { name: c.hex(), hex: c.hex() };
+        let swatch = |c: Rgb, label: String| Swatch { name: c.hex(), hex: c.hex(), label };
         // the theme's ten colours in the desktop's order, then five lighter and darker shades of
         // each: the colour's lightness moved towards white or black, its hue and saturation kept
         let base = s.doc.settings.theme_colors.iter().take(10).copied().collect::<Vec<_>>();
         let order = [1usize, 0, 3, 2, 4, 5, 6, 7, 8, 9];
         let colours: Vec<Rgb> = order.iter().filter_map(|&i| base.get(i).copied()).collect();
         let columns: Vec<[Rgb; 6]> = colours.iter().map(|&c| shades(c)).collect();
-        let theme = (0..6).map(|row| columns.iter().map(|col| swatch(col[row])).collect()).filter(|row: &Vec<Swatch>| !row.is_empty()).collect();
-        let standard = ["C00000", "FF0000", "FFC000", "FFFF00", "92D050", "00B050", "00B0F0", "0070C0", "002060", "7030A0"]
-            .iter()
-            .filter_map(|h| Rgb::parse(h))
-            .map(swatch)
+        // named by their place in the theme (bg1, tx1, bg2, tx2, accents), as the file format does
+        const SLOTS: [&str; 10] =
+            ["Background 1", "Text 1", "Background 2", "Text 2", "Accent 1", "Accent 2", "Accent 3", "Accent 4", "Accent 5", "Accent 6"];
+        let theme = (0..6)
+            .map(|row| {
+                columns
+                    .iter()
+                    .zip(colours.iter().zip(SLOTS))
+                    .map(|(col, (&base, slot))| {
+                        let shade = shade_names(base).get(row).copied().unwrap_or("");
+                        swatch(col[row], if shade.is_empty() { slot.to_string() } else { format!("{slot}, {shade}") })
+                    })
+                    .collect()
+            })
+            .filter(|row: &Vec<Swatch>| !row.is_empty())
             .collect();
+        let standard = [
+            ("C00000", "Dark Red"),
+            ("FF0000", "Red"),
+            ("FFC000", "Orange"),
+            ("FFFF00", "Yellow"),
+            ("92D050", "Light Green"),
+            ("00B050", "Green"),
+            ("00B0F0", "Light Blue"),
+            ("0070C0", "Blue"),
+            ("002060", "Dark Blue"),
+            ("7030A0", "Purple"),
+        ]
+        .iter()
+        .filter_map(|(h, label)| Some(swatch(Rgb::parse(h)?, label.to_string())))
+        .collect();
         // the highlight colours, by their OOXML names: `format.highlight` matches those first, so
         // they are unambiguous (its "green" is the bright green; the darker one is "darkGreen")
         let highlights = Highlight::ALL
             .iter()
             .filter(|h| !matches!(h, Highlight::None | Highlight::White))
-            .filter_map(|h| Some(Swatch { name: h.ooxml().to_string(), hex: h.rgb()?.hex() }))
+            .filter_map(|h| Some(Swatch { name: h.ooxml().to_string(), hex: h.rgb()?.hex(), label: highlight_label(*h).to_string() }))
             .collect();
         ColorChoices { theme, standard, highlights }
     }
@@ -1526,6 +1553,42 @@ fn link_span(s: &Session) -> Option<(String, usize, usize)> {
         last += 1;
     }
     Some((url, runs.get(first)?.0.start, runs.get(last)?.0.end))
+}
+
+/// The names of a theme colour's five shades ([`shades`]), after an empty one for the colour.
+fn shade_names(c: wordcraft_engine::doc::props::Rgb) -> [&'static str; 6] {
+    let (_, _, l) = to_hsl(c);
+    if l < 0.2 {
+        ["", "Lighter 90%", "Lighter 75%", "Lighter 50%", "Lighter 25%", "Lighter 10%"]
+    } else if l > 0.8 {
+        ["", "Darker 10%", "Darker 25%", "Darker 50%", "Darker 75%", "Darker 90%"]
+    } else {
+        ["", "Lighter 80%", "Lighter 60%", "Lighter 40%", "Darker 25%", "Darker 50%"]
+    }
+}
+
+/// A highlight colour as people call it.
+fn highlight_label(h: wordcraft_engine::doc::props::Highlight) -> &'static str {
+    use wordcraft_engine::doc::props::Highlight as H;
+    match h {
+        H::Yellow => "Yellow",
+        H::BrightGreen => "Bright Green",
+        H::Turquoise => "Turquoise",
+        H::Pink => "Pink",
+        H::Blue => "Blue",
+        H::Red => "Red",
+        H::DarkBlue => "Dark Blue",
+        H::Teal => "Teal",
+        H::Green => "Green",
+        H::Violet => "Violet",
+        H::DarkRed => "Dark Red",
+        H::DarkYellow => "Dark Yellow",
+        H::Gray50 => "Gray",
+        H::Gray25 => "Light Gray",
+        H::Black => "Black",
+        H::White => "White",
+        H::None => "No Color",
+    }
 }
 
 /// A theme colour's column in the colour menus: the colour, then five shades. How far each moves

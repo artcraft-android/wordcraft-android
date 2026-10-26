@@ -1336,7 +1336,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (text.isNotBlank()) p.put("text", text)
         command("insert.link", p.toString())
         linkPane = false
+        if (address.isNotBlank()) {
+            recentLinks = (listOf(address) + recentLinks.filter { it != address }).take(5)
+            prefs.edit().putString("recentLinks", recentLinks.joinToString(" ")).apply()
+        }
     }
+
+    /** The addresses linked lately, newest first (the Link page's list), kept space-separated. */
+    var recentLinks by mutableStateOf(prefs.getString("recentLinks", null)?.split(' ')?.filter { it.isNotBlank() }.orEmpty())
+        private set
 
     fun addComment(text: String) {
         if (text.isNotBlank()) command("review.newComment", JSONObject().put("text", text).toString())

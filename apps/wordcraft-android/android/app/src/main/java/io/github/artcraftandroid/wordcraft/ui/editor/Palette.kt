@@ -417,7 +417,13 @@ internal fun SwatchGrid(swatches: List<Swatch>, perRow: Int, cellW: Dp, selected
             Row {
                 for (s in row) {
                     val on = s.hex.equals(selected, ignoreCase = true)
-                    Box(Modifier.size(cellW, 42.dp).clickable { onPick(s) }, contentAlignment = Alignment.Center) {
+                    Box(
+                        Modifier.size(cellW, 42.dp).clickable { onPick(s) }.semantics {
+                            contentDescription = s.label
+                            this.selected = on
+                        },
+                        contentAlignment = Alignment.Center,
+                    ) {
                         Box(
                             Modifier.size(cellW - 4.dp, 38.dp).background(hexColor(s.hex))
                                 .border(if (on) 2.dp else 1.dp, if (on) WordColors.OnStrip else WordColors.Pressed),
@@ -478,7 +484,7 @@ private fun MoreColorsPanel(vm: AppViewModel) {
             }
         }
         for (g in 0 until 10) add("%02X%02X%02X".format(255 - g * 28, 255 - g * 28, 255 - g * 28))
-    }.map { Swatch(it, it) }
+    }.map { Swatch(it, it, "#$it") }
     Scrolling {
         SwatchGrid(swatches, perRow = 10, cellW = 49.dp, selected = current) { vm.applyFontColor(it.hex) }
     }
@@ -514,6 +520,9 @@ internal fun Tile(preview: String, selected: Boolean, w: Dp, h: Dp, onClick: () 
     }
 }
 
+/** What a screen reader says for each bullet of the gallery. */
+private val BULLET_NAMES = listOf("Solid Circle", "Hollow Circle", "Solid Square", "Four Diamonds", "Arrow", "Check Mark")
+
 @Composable
 private fun BulletsPanel(vm: AppViewModel) {
     val on = vm.format?.bullets == true
@@ -525,8 +534,8 @@ private fun BulletsPanel(vm: AppViewModel) {
     val size = mapOf("•" to 9.sp, "○" to 10.sp)
     Scrolling {
         Row(Modifier.padding(start = 21.dp, top = 20.dp), horizontalArrangement = Arrangement.spacedBy(13.3.dp)) {
-            ListTile(48.dp, 48.dp, !on, { vm.command("para.bullets", json("off" to true)) }) { TileText("None", 11.sp) }
-            for (k in kinds) ListTile(48.dp, 48.dp, false, { vm.command("para.bullets", json("kind" to k)) }) { TileText(shown[k] ?: k, size[k] ?: 15.sp) }
+            ListTile(48.dp, 48.dp, !on, { vm.command("para.bullets", json("off" to true)) }, label = "None") { TileText("None", 11.sp) }
+            for ((k, name) in kinds.zip(BULLET_NAMES)) ListTile(48.dp, 48.dp, false, { vm.command("para.bullets", json("kind" to k)) }, label = name) { TileText(shown[k] ?: k, size[k] ?: 15.sp) }
         }
     }
 }
@@ -550,7 +559,7 @@ private fun NumberingPanel(vm: AppViewModel) {
             for (row in tiles.chunked(7)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(13.dp)) {
                     for ((labels, click) in row) {
-                        ListTile(57.dp, 56.dp, labels == null && !on, click) {
+                        ListTile(57.dp, 56.dp, labels == null && !on, click, label = labels?.joinToString(" ") ?: "None") {
                             if (labels == null) TileText("None", 11.sp) else NumberPreview(labels)
                         }
                     }

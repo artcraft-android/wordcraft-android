@@ -622,7 +622,8 @@ fn change_bars(doc: &Document, page: &Page, m: &MarkupOptions, alpha: f32, out: 
         ChangeBar::Outside => doc.settings.mirror_margins && page.number % 2 == 1,
         _ => false,
     };
-    let bx = if right { page.body.right() + 9.0 } else { page.body.x - 9.0 };
+    // in the middle of the margin, as the phone app draws them on its pages and in Mobile View
+    let bx = if right { page.body.right() + (page.w - page.body.right()).max(0.0) / 2.0 } else { page.body.x.max(0.0) / 2.0 };
     let color = m.changed_lines_color.unwrap_or(CHANGE_BAR);
     // changed lines one after another make one bar, over the spacing between their paragraphs
     // too, as the phone app draws it

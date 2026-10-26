@@ -28,6 +28,9 @@ fn substitutes(family: &str) -> &'static [&'static str] {
     const SANS: &[&str] = &["Carlito", "Helvetica Neue", "Arial", "Liberation Sans", "Noto Sans", "DejaVu Sans", "Source Sans 3"];
     const SERIF: &[&str] = &["Caladea", "Times New Roman", "Liberation Serif", "Georgia", "Noto Serif", "DejaVu Serif", "Source Serif 4"];
     const MONO: &[&str] = &["Courier New", "Liberation Mono", "Menlo", "Consolas", "DejaVu Sans Mono", "JetBrains Mono"];
+    // Courier New: Courier Prime keeps its widths and its typewriter look (Liberation Mono keeps the
+    // widths in a plainer face)
+    const COURIER: &[&str] = &["Courier New", "Courier Prime", "Liberation Mono", "Cousine", "Menlo", "DejaVu Sans Mono", "JetBrains Mono"];
     const ARIAL: &[&str] = &["Liberation Sans", "Helvetica", "Helvetica Neue", "Arimo", "Source Sans 3"];
     const TIMES: &[&str] = &["Liberation Serif", "Times", "Tinos", "Source Serif 4"];
     // Aptos has no open twin: Source Sans 3 (bundled) comes nearest its widths (about 2% short;
@@ -84,7 +87,8 @@ fn substitutes(family: &str) -> &'static [&'static str] {
         "arial" | "helvetica" | "arial nova" => ARIAL,
         "aptos" | "aptos display" => APTOS,
         "times new roman" | "times" => TIMES,
-        "courier new" | "courier" | "consolas" | "lucida console" | "cascadia code" | "cascadia mono" => MONO,
+        "courier new" | "courier" => COURIER,
+        "consolas" | "lucida console" | "cascadia code" | "cascadia mono" => MONO,
         "symbol" | "wingdings" | "wingdings 2" | "wingdings 3" | "segoe ui symbol" | "webdings" => SYMBOL,
         "cambria"
         | "cambria math"
@@ -124,7 +128,7 @@ fn metric_twins(family: &str) -> &'static [&'static str] {
     match family.trim().to_ascii_lowercase().as_str() {
         "times new roman" => &["Liberation Serif", "Tinos"],
         "arial" => &["Liberation Sans", "Arimo"],
-        "courier new" => &["Liberation Mono", "Cousine"],
+        "courier new" => &["Liberation Mono", "Cousine", "Courier Prime"],
         "calibri" => &["Carlito"],
         "cambria" => &["Caladea"],
         _ => &[],

@@ -846,3 +846,16 @@ fn a_document_opens_at_its_saved_zoom() {
     // and scrolled past the first page's top margin
     assert!((m.first_text_top() - 72.0).abs() < 0.5, "{}", m.first_text_top());
 }
+
+/// Each colour in the colour menus has a name a screen reader says: the theme's by their place
+/// and shade, the standard ones and the highlights by their colour.
+#[test]
+fn colour_swatches_have_names() {
+    let c = MobileSession::default().color_choices();
+    assert_eq!(c.theme[0][0].label, "Background 1");
+    assert_eq!(c.theme[0][4].label, "Accent 1");
+    assert!(c.theme[1][4].label.starts_with("Accent 1, "), "{}", c.theme[1][4].label);
+    assert_eq!(c.standard[0].label, "Dark Red");
+    assert_eq!(c.highlights[0].label, "Yellow");
+    assert!(c.theme.iter().flatten().chain(&c.standard).chain(&c.highlights).all(|s| !s.label.is_empty()));
+}

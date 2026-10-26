@@ -11,6 +11,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -48,6 +50,38 @@ internal fun ShapeGalleryPanel(vm: AppViewModel) {
     }
 }
 
+/**
+ * What a screen reader says for a gallery entry: the text box, a line by its kind and arrows, or a
+ * preset's name spelt out ("rightArrow" → "Right Arrow", "rect" → "Rectangle").
+ */
+internal fun shapeName(key: String): String {
+    if (key == TEXT_BOX) return "Text Box"
+    if (key.contains(':')) {
+        val kind = when (key.substringBefore(':')) {
+            "straightConnector" -> "Line"
+            "elbowConnector" -> "Elbow Connector"
+            else -> "Curved Connector"
+        }
+        return when (key.substringAfter(':')) {
+            "end" -> "$kind Arrow"
+            "both" -> "$kind Double Arrow"
+            else -> kind
+        }
+    }
+    val words = key.replace(Regex("([a-z])([A-Z0-9])"), "$1 $2").replace(Regex("([0-9])([A-Za-z])"), "$1 $2").split(' ')
+    return words.joinToString(" ") { w ->
+        when (w.lowercase()) {
+            "rect" -> "Rectangle"
+            "rt" -> "Right"
+            "ellipse" -> "Oval"
+            "round" -> "Rounded"
+            "snip" -> "Snipped"
+            "flow" -> "Flow"
+            else -> w.replaceFirstChar { it.uppercase() }
+        }
+    }
+}
+
 /** The text box entry. */
 internal const val TEXT_BOX = "textBox"
 
@@ -66,7 +100,7 @@ private fun GalleryGroup(name: String, items: List<String>, vm: AppViewModel) {
         for (row in items.chunked(8)) {
             Row {
                 for (key in row) {
-                    Box(Modifier.size(61.3.dp, 56.dp).clickable { vm.insertShape(key) }, contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(61.3.dp, 56.dp).clickable { vm.insertShape(key) }.semantics { contentDescription = shapeName(key) }, contentAlignment = Alignment.Center) {
                         ShapeIcon(key)
                     }
                 }

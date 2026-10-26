@@ -238,6 +238,8 @@ private val OPEN_MATERIAL = listOf(
     "Inter typeface: SIL Open Font License 1.1",
     "Lucide icons: ISC License",
     "Carlito and Caladea typefaces: SIL Open Font License 1.1",
+    "STIX Two Math typeface: SIL Open Font License 1.1",
+    "Courier Prime typeface: SIL Open Font License 1.1",
     "Liberation typefaces: SIL Open Font License 1.1",
     "Source Sans 3, Source Serif 4, JetBrains Mono: SIL Open Font License 1.1",
 )

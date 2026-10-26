@@ -381,6 +381,15 @@ androidComponents {
                     "Caladea-Italic.ttf" to "$gf/caladea/Caladea-Italic.ttf 4359a8e24f748b6447b1ff6d7a174febe70961d29f8bb8634b56dacd740a3deb",
                     "Caladea-BoldItalic.ttf" to "$gf/caladea/Caladea-BoldItalic.ttf ccabaa7b7e2fdf253d2b1a5fa699dd8a3df8d835a9eb285ad82631a677eb76c0",
                     "OFL-Caladea.txt" to "$gf/caladea/OFL.txt ccdab61d371d8c8683a128a92cd7d498dbdb1d37689f7cb21f1bf6b16658d213",
+                    // equations: an open math font (a MATH table), as Cambria Math sets them
+                    "STIXTwoMath-Regular.ttf" to "$gf/stixtwomath/STIXTwoMath-Regular.ttf 562551b15b836e6e01d1b7350909baf3c8c8d83260c1190fbf4544333e6936de",
+                    "OFL-STIXTwoMath.txt" to "$gf/stixtwomath/OFL.txt 0c8825913b60d858aacdb33c4ca6660a7d64b0d6464702efbb19313f5765861a",
+                    // Courier New's widths in a typewriter face
+                    "CourierPrime-Regular.ttf" to "$gf/courierprime/CourierPrime-Regular.ttf 72f793376f8e2841656bf21d77a5de010f2929bd6956a22ee848ad0c7eb978af",
+                    "CourierPrime-Bold.ttf" to "$gf/courierprime/CourierPrime-Bold.ttf ff1f38786c849d1c41fa8e447960abdb2bd75fdfb0cfcdeb524fad65a5af3638",
+                    "CourierPrime-Italic.ttf" to "$gf/courierprime/CourierPrime-Italic.ttf f1b9a5829789f7e56432a9f3bc7665ef4531dbba1c112639e48bef39621a006b",
+                    "CourierPrime-BoldItalic.ttf" to "$gf/courierprime/CourierPrime-BoldItalic.ttf 3355273f3ea6d6362658f9564f4e83d59e156cf1a182e3c1592b5c5943627dcc",
+                    "OFL-CourierPrime.txt" to "$gf/courierprime/OFL.txt 9a755af092b494944c99f471be6fddd19b006a448fefdc4717e4ee0aa09a97b0",
                 ),
             )
             archive.set("https://github.com/liberationfonts/liberation-fonts/files/7261482/liberation-fonts-ttf-2.1.5.tar.gz 7191c669bf38899f73a2094ed00f7b800553364f90e2637010a69c0e268f25d0")
