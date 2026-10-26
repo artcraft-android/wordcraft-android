@@ -3041,7 +3041,7 @@ fn word_count_includes_text_boxes_by_default() {
 }
 
 #[test]
-fn word_count_includes_numbered_list_labels_in_words_but_not_characters() {
+fn word_count_includes_numbered_list_labels_in_words_and_characters() {
     let mut d = wordcraft_doc::Document::new();
     let num_id = d.numbering.add_list(wordcraft_doc::ListKind::Numbered);
     let mut p = wordcraft_doc::Paragraph::with_text("Apple", wordcraft_doc::CharProps::default());
@@ -3053,10 +3053,10 @@ fn word_count_includes_numbered_list_labels_in_words_but_not_characters() {
     // Generated label "1." + "Apple" = 2 words.
     assert_eq!(v["words"].as_u64(), Some(2));
     assert_eq!(s.word_count(), 2);
-    // Generated list label "1." is formatting metadata and not run characters,
-    // so Word excludes it from character counts: "Apple" has 5 characters.
-    assert_eq!(v["characters"].as_u64(), Some(5));
-    assert_eq!(v["charactersWithSpaces"].as_u64(), Some(5));
+    // The phone app counts the label's characters too, and the tab after it as a space:
+    // "1." and "Apple" make 7 characters, 8 with the tab.
+    assert_eq!(v["characters"].as_u64(), Some(7));
+    assert_eq!(v["charactersWithSpaces"].as_u64(), Some(8));
 }
 
 /// The laid-out area of the only text box.

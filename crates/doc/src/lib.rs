@@ -998,8 +998,7 @@ impl Document {
         Ok(id)
     }
 
-    /// Count words like Word's status bar (whitespace-separated tokens containing a letter or digit,
-    /// including generated numbered-list labels).
+    /// Count words like Word Count ([`count_words`]), including generated list labels.
     pub fn word_count(&self) -> usize {
         self.story_word_count(StoryRef::Body)
     }
@@ -1009,11 +1008,20 @@ impl Document {
         self.counted_stories().iter().map(|s| self.story_word_count(*s)).sum()
     }
 
-    /// Word count of one story, including generated numbered-list labels.
+    /// Word count of one story, including generated list labels.
     pub fn story_word_count(&self, s: StoryRef) -> usize {
-        let Some(bl) = self.story(s) else { return 0 };
-        let mut counters = numbering::Counters::default();
-        story_word_count_of(bl, &self.numbering, &self.styles, &mut counters, 0)
+        self.story_counts(s).words
+    }
+
+    /// Word Count's figures for one story. List labels count as text followed by their tab or
+    /// space; paragraph marks and the breaks between table cells don't count.
+    pub fn story_counts(&self, s: StoryRef) -> TextCounts {
+        let mut out = TextCounts::default();
+        if let Some(bl) = self.story(s) {
+            let mut counters = numbering::Counters::default();
+            story_counts_of(bl, &self.numbering, &self.styles, &mut counters, &mut out, 0);
+        }
+        out
     }
 
     /// The body, then the text boxes, footnotes and endnotes it shows (nested ones too), in
@@ -1428,9 +1436,42 @@ impl PermRange {
     }
 }
 
-/// Words in `s` (tokens separated by whitespace that contain at least one alphanumeric char).
+/// What Word Count reports for some text.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TextCounts {
+    pub words: usize,
+    /// Characters, not counting spaces, tabs and other white space.
+    pub chars: usize,
+    pub chars_with_spaces: usize,
+}
+
+impl TextCounts {
+    fn add_text(&mut self, s: &str) {
+        self.words = self.words.saturating_add(count_words(s));
+        self.chars = self.chars.saturating_add(s.chars().filter(|c| !c.is_whitespace()).count());
+        self.chars_with_spaces = self.chars_with_spaces.saturating_add(s.chars().count());
+    }
+}
+
+impl std::ops::Add for TextCounts {
+    type Output = Self;
+    fn add(self, o: Self) -> Self {
+        TextCounts {
+            words: self.words.saturating_add(o.words),
+            chars: self.chars.saturating_add(o.chars),
+            chars_with_spaces: self.chars_with_spaces.saturating_add(o.chars_with_spaces),
+        }
+    }
+}
+
+/// Characters Word Count treats like spaces between words, though it counts them as
+/// characters: the en dash, the em dash and the bullet ("x—y" is two words; a lone "–" none).
+const WORD_BREAKS: [char; 3] = ['\u{2013}', '\u{2014}', '\u{2022}'];
+
+/// Words in `s` as Word Count counts them: every run of characters between white space, en and
+/// em dashes and bullets, so a lone "&", "-" or "○" is a word too.
 pub fn count_words(s: &str) -> usize {
-    s.split(|c: char| c.is_whitespace() || c == para::OBJ).filter(|w| w.chars().any(char::is_alphanumeric)).count()
+    s.split(|c: char| c.is_whitespace() || c == para::OBJ || WORD_BREAKS.contains(&c)).filter(|w| !w.is_empty()).count()
 }
 
 fn walk(bl: &Blocks, prefix: &mut Vec<u32>, out: &mut Vec<Path>, depth: usize) {
@@ -1498,33 +1539,43 @@ fn text_of(bl: &Blocks, out: &mut String, depth: usize, mode: TextMode) {
     }
 }
 
-fn story_word_count_of(bl: &Blocks, numbering: &Numbering, styles: &styles::StyleSheet, counters: &mut numbering::Counters, depth: usize) -> usize {
+fn story_counts_of(
+    bl: &Blocks,
+    numbering: &Numbering,
+    styles: &styles::StyleSheet,
+    counters: &mut numbering::Counters,
+    out: &mut TextCounts,
+    depth: usize,
+) {
     if depth > 16 {
-        return 0;
+        return;
     }
-    let mut total = 0usize;
     for b in bl {
         match &**b {
             Block::Para(p) => {
                 let n = p.props.numbering.or_else(|| styles.resolve_para(&p.props).numbering).filter(|n| n.num != 0);
                 if let Some(n) = n
                     && let Some((label, def)) = counters.next_label(numbering, n.num, n.level)
-                    && !matches!(def.format, section::NumFormat::Bullet | section::NumFormat::None)
+                    && !label.is_empty()
                 {
-                    total = total.saturating_add(count_words(&label));
+                    // a symbol-font bullet counts as what it shows (Symbol's bullet is a "•")
+                    let shown = def.chr.font.as_deref().map(|f| symbol_fonts::map_text(f, &label));
+                    out.add_text(shown.as_deref().unwrap_or(&label));
+                    if def.suffix != numbering::LevelSuffix::Nothing {
+                        out.chars_with_spaces = out.chars_with_spaces.saturating_add(1);
+                    }
                 }
-                total = total.saturating_add(count_words(&p.plain_text()));
+                out.add_text(&p.plain_text());
             }
             Block::Table(t) => {
                 for row in &t.rows {
                     for c in &row.cells {
-                        total = total.saturating_add(story_word_count_of(&c.blocks, numbering, styles, counters, depth + 1));
+                        story_counts_of(&c.blocks, numbering, styles, counters, out, depth + 1);
                     }
                 }
             }
         }
     }
-    total
 }
 
 #[cfg(test)]

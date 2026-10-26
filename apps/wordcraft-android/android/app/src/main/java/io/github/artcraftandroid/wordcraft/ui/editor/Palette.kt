@@ -219,7 +219,11 @@ internal fun Band() {
     Spacer(Modifier.fillMaxWidth().height(BAND).background(WordColors.Divider))
 }
 
-/** A row of the palette: an icon at 16 dp, a label at 50 dp, a chevron when it drills in. */
+/**
+ * A row of the palette: an icon at 16 dp, a label at 50 dp (at 16 dp when [bare]), a chevron when
+ * it drills in. Screen readers hear "label menu" (or [description]) for the part that opens a
+ * page, as in the reference app.
+ */
 @Composable
 internal fun PaletteRow(
     label: String,
@@ -231,21 +235,29 @@ internal fun PaletteRow(
     iconTint: Color = WordColors.OnStrip,
     height: Dp = ROW,
     enabled: Boolean = true,
+    bare: Boolean = false,
+    description: String? = null,
 ) {
     Row(Modifier.fillMaxWidth().height(height + 1.dp).background(if (pressed) WordColors.Pressed else WordColors.Surface).bottomEdge(WordColors.Divider), verticalAlignment = Alignment.CenterVertically) {
-        Row(Modifier.weight(1f).fillMaxHeight().clickable(enabled = enabled, onClick = onClick), verticalAlignment = Alignment.CenterVertically) {
+        val opens = chevron && onOpen == null
+        Row(
+            Modifier.weight(1f).fillMaxHeight().clickable(enabled = enabled, onClick = onClick).then(if (opens) Modifier.semantics { contentDescription = description ?: "$label menu" } else Modifier),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Spacer(Modifier.width(16.dp))
-            Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { if (glyph != null) GlyphIcon(glyph, if (enabled) iconTint else WordColors.Disabled) }
-            Spacer(Modifier.width(10.dp))
+            if (!bare) {
+                Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { if (glyph != null) GlyphIcon(glyph, if (enabled) iconTint else WordColors.Disabled) }
+                Spacer(Modifier.width(10.dp))
+            }
             Text(label, color = if (enabled) WordColors.OnSurface else WordColors.Disabled, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            if (chevron && onOpen == null) {
+            if (opens) {
                 GlyphIcon(LucideIcons.ChevronRight.glyph(), WordColors.OnStrip, size = 20.dp)
                 Spacer(Modifier.width(15.dp))
             }
         }
         if (onOpen != null) {
             Box(Modifier.width(1.dp).height(25.dp).background(WordColors.Divider))
-            Box(Modifier.width(50.dp).fillMaxHeight().clickable(enabled = enabled, onClick = onOpen), contentAlignment = Alignment.Center) {
+            Box(Modifier.width(50.dp).fillMaxHeight().clickable(enabled = enabled, onClick = onOpen).semantics { contentDescription = description ?: "$label menu" }, contentAlignment = Alignment.Center) {
                 GlyphIcon(LucideIcons.ChevronRight.glyph(), if (enabled) WordColors.OnStrip else WordColors.Disabled, size = 20.dp)
             }
         }

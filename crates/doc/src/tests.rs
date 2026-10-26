@@ -13,7 +13,10 @@ fn new_document_is_valid() {
 fn word_count() {
     let d = Document::from_text("Hello, world!\nThis is — a test 42.\n\n");
     assert_eq!(d.word_count(), 7);
-    assert_eq!(count_words(" -- "), 0);
+    // Any run between spaces is a word, except that en and em dashes and bullets break words
+    // and never make one.
+    assert_eq!(count_words(" -- & $ \u{25cb} "), 4);
+    assert_eq!(count_words("x\u{2014}y \u{2013} \u{2022} a\u{2022}b"), 4);
 }
 
 #[test]
@@ -59,6 +62,52 @@ fn word_count_includes_numbered_labels_with_nothing_suffix() {
     // and label "2." and text "Banana Cherry" as 3 words (total: 5 words),
     // even though LevelSuffix::Nothing produces no visible separator between label and text.
     assert_eq!(d.word_count(), 5);
+}
+
+#[test]
+fn counts_take_list_labels_as_text_and_skip_cell_breaks() {
+    let mut d = Document::new();
+    let num_id = d.numbering.add_list(ListKind::Numbered);
+    let bul_id = d.numbering.add_list(ListKind::BulletChar('o'));
+    let item = |text: &str, num: u32| {
+        let mut p = Paragraph::with_text(text, CharProps::default());
+        p.props.numbering = Some(props::NumRef { num, level: 0 });
+        Arc::new(Block::Para(p))
+    };
+    let mut t = Table::new(1, 2, 200.0);
+    t.rows[0].cells[0].blocks = vec![para_block(Paragraph::with_text("Soil", CharProps::default()))];
+    t.rows[0].cells[1].blocks = vec![para_block(Paragraph::with_text("8", CharProps::default()))];
+    d.body = vec![item("Clear the ground", num_id), item("Build", num_id), item("Herbs", bul_id), Arc::new(Block::Table(t))];
+
+    // "1.", "2." and the "o" bullet are words and characters, each followed by its tab; the
+    // table's cells run on with nothing between them, and paragraph marks don't count.
+    let c = d.story_counts(StoryRef::Body);
+    assert_eq!(
+        c,
+        TextCounts { words: 3 + 2 + 1 + 1 + 1 + 1 + 1, chars: 14 + 5 + 5 + 4 + 1 + 2 + 2 + 1, chars_with_spaces: 16 + 5 + 5 + 4 + 1 + 2 + 2 + 1 + 3 }
+    );
+    assert_eq!(d.word_count(), c.words);
+}
+
+#[test]
+fn symbol_font_bullets_count_as_what_they_show() {
+    let mut d = Document::new();
+    let mut list = |c: char, font: &str| {
+        let id = d.numbering.add_list(ListKind::BulletChar(c));
+        let aid = d.numbering.num(id).expect("list num exists").abstract_id;
+        let a = d.numbering.abstracts.iter_mut().find(|a| a.id == aid).expect("abstract num exists");
+        a.levels[0].chr.font = Some(font.into());
+        id
+    };
+    // Symbol's bullet is a "•", which isn't a word; Wingdings' square bullet is a "▪", which is.
+    let (symbol, wingdings) = (list('\u{F0B7}', "Symbol"), list('\u{F0A7}', "Wingdings"));
+    let item = |num: u32| {
+        let mut p = Paragraph::with_text("a", CharProps::default());
+        p.props.numbering = Some(props::NumRef { num, level: 0 });
+        Arc::new(Block::Para(p))
+    };
+    d.body = vec![item(symbol), item(wingdings)];
+    assert_eq!(d.story_counts(StoryRef::Body), TextCounts { words: 3, chars: 4, chars_with_spaces: 6 });
 }
 
 #[test]

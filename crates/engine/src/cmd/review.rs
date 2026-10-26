@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Value, json};
 use wordcraft_doc::para::InlineObject;
-use wordcraft_doc::{Comment, Paragraph, PartKind, Pos, StoryRef, para_block};
+use wordcraft_doc::{Comment, Paragraph, PartKind, Pos, StoryRef, TextCounts, para_block};
 
 use super::{fmt_revisions, now_iso, pos_json, sel_result};
 use crate::{CmdError, CmdResult, CommandSpec, Selection, Session, p};
@@ -804,18 +804,18 @@ fn word_count(s: &mut Session, v: &Value) -> CmdResult {
     }
     let stories = if s.prefs.count_notes { s.doc.counted_stories() } else { vec![StoryRef::Body] };
     // A selected picture, shape or text box isn't a text selection: count the document.
-    let text = if s.sel.is_collapsed() || super::objects::object_selection(s).is_some() {
-        stories.iter().map(|st| s.doc.plain_text(*st)).collect::<Vec<_>>().join("\n")
+    let whole = s.sel.is_collapsed() || super::objects::object_selection(s).is_some();
+    let text = if whole { stories.iter().map(|st| s.doc.plain_text(*st)).collect::<Vec<_>>().join("\n") } else { s.selected_text() };
+    let counts = if whole {
+        stories.iter().map(|st| s.doc.story_counts(*st)).fold(TextCounts::default(), |a, b| a + b)
     } else {
-        s.selected_text()
+        TextCounts {
+            words: wordcraft_doc::count_words(&text),
+            chars: text.chars().filter(|c| !c.is_whitespace()).count(),
+            chars_with_spaces: text.chars().filter(|c| *c != '\n').count(),
+        }
     };
-    let words = if s.sel.is_collapsed() || super::objects::object_selection(s).is_some() {
-        stories.iter().map(|st| s.doc.story_word_count(*st)).sum()
-    } else {
-        wordcraft_doc::count_words(&text)
-    };
-    let chars = text.chars().filter(|c| *c != '\n').count();
-    let chars_no_spaces = text.chars().filter(|c| !c.is_whitespace()).count();
+    let (words, chars, chars_no_spaces) = (counts.words, counts.chars_with_spaces, counts.chars);
     let paragraphs = text.split('\n').filter(|l| !l.trim().is_empty()).count();
     let lines: usize = {
         let l = s.layout();

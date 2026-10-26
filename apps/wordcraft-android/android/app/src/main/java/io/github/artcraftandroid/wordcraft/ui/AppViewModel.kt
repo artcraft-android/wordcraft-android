@@ -561,6 +561,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (on) scheduleAutoSave()
     }
 
+    /** Word Count counts text boxes, footnotes and endnotes too. */
+    var countWithBoxes by mutableStateOf(prefs.getBoolean("countWithBoxes", true))
+        private set
+
+    /** Word Count's "Show Word Count" option, kept like the other options (the phone has no
+     *  status bar to show it in). */
+    var showWordCount by mutableStateOf(prefs.getBoolean("showWordCount", false))
+        private set
+
+    fun chooseCountWithBoxes(on: Boolean) {
+        countWithBoxes = on
+        prefs.edit().putBoolean("countWithBoxes", on).apply()
+    }
+
+    fun chooseShowWordCount(on: Boolean) {
+        showWordCount = on
+        prefs.edit().putBoolean("showWordCount", on).apply()
+    }
+
     /** Recent Shapes: the gallery entries inserted lately, newest first (see ShapeGalleryPanel). */
     var recentShapes by mutableStateOf(
         prefs.getString("recentShapes", null)?.split(',')?.filter { it.isNotBlank() }?.takeIf { it.isNotEmpty() }

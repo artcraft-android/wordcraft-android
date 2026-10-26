@@ -105,6 +105,14 @@ object WordColors {
     val CheckEdge get() = pick(0xFF8A8A8A, 0xFF666666)
     val SettingsLine get() = pick(0xFFC6C6C6, 0xFF969696)
 
+    /** Word Count's and Language's text (and Word Count's ticks), its boxes' edges, the rule under the counts. */
+    val OnLists get() = pick(0xFF505050, 0xFFD2D2D2)
+    val CountsBoxEdge get() = pick(0xFFD2D2D2, 0xFF666666)
+    val CountsRule = Color(0xFFBDBDBD)
+
+    /** Language's chosen language: grey in light, the reference's blue in dark. */
+    val ListChosen get() = pick(0xFFD2D2D2, 0xFF4D7BE1)
+
     /** Over the pages behind a bottom sheet. */
     val Scrim = Color(0x52000000)
 
