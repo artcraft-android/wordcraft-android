@@ -170,7 +170,8 @@ fun TabSwitcher(vm: AppViewModel, modifier: Modifier = Modifier) {
         for (tab in tabs) {
             val current = tab == vm.paletteTab
             Box(
-                Modifier.fillMaxWidth().height(ROW).background(if (current) WordColors.PopupCurrent else WordColors.PopupFill).clickable { vm.showTab(tab) },
+                Modifier.fillMaxWidth().height(ROW).background(if (current) WordColors.PopupCurrent else WordColors.PopupFill).clickable { vm.showTab(tab) }
+                    .semantics { contentDescription = "$tab tab" },
                 contentAlignment = Alignment.CenterStart,
             ) {
                 Text(tab, color = if (current) WordColors.OnPopupCurrent else WordColors.OnPopup, fontSize = 18.sp, modifier = Modifier.padding(start = 16.dp))
@@ -186,7 +187,10 @@ private fun TabHeader(vm: AppViewModel, tab: String) {
         Modifier.fillMaxWidth().height(ROW).background(WordColors.Strip).topEdge(WordColors.StripMore).bottomEdge(WordColors.StripMore),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(Modifier.widthIn(min = 112.dp).fillMaxHeight().clickable { vm.toggleTabs() }.padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.widthIn(min = 112.dp).fillMaxHeight().clickable { vm.toggleTabs() }.semantics { contentDescription = "Tab menu, $tab selected" }.padding(start = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(tab, color = WordColors.Accent, fontSize = 18.sp, maxLines = 1)
             Spacer(Modifier.width(12.dp).weight(1f, fill = false))
             GlyphIcon(LucideIcons.ChevronsUpDown.glyph(), WordColors.SwitchIcon, size = 20.dp)
@@ -194,10 +198,10 @@ private fun TabHeader(vm: AppViewModel, tab: String) {
         }
         Box(Modifier.width(1.dp).height(32.dp).background(WordColors.SwitcherDivider))
         Spacer(Modifier.weight(1f))
-        BarButton(LucideIcons.Lightbulb.glyph(), WordColors.HeaderIcon, { vm.tellMeOpen = true }, width = 48.dp, height = ROW)
-        BarButton(LucideIcons.Undo2.glyph(), WordColors.HeaderIcon, vm::undo, enabled = info?.canUndo == true, width = 48.dp, height = ROW, disabledTint = WordColors.HeaderIconDisabled)
-        BarButton(LucideIcons.Redo2.glyph(), WordColors.HeaderIcon, vm::redo, enabled = info?.canRedo == true, width = 48.dp, height = ROW, disabledTint = WordColors.HeaderIconDisabled)
-        BarButton(Glyph.Triangle(up = false), WordColors.CollapseIcon, vm::collapsePalette, width = 43.dp, height = ROW)
+        BarButton(LucideIcons.Lightbulb.glyph(), WordColors.HeaderIcon, { vm.tellMeOpen = true }, width = 48.dp, height = ROW, label = "Tell me")
+        BarButton(LucideIcons.Undo2.glyph(), WordColors.HeaderIcon, vm::undo, enabled = info?.canUndo == true, width = 48.dp, height = ROW, disabledTint = WordColors.HeaderIconDisabled, label = "Undo")
+        BarButton(LucideIcons.Redo2.glyph(), WordColors.HeaderIcon, vm::redo, enabled = info?.canRedo == true, width = 48.dp, height = ROW, disabledTint = WordColors.HeaderIconDisabled, label = "Redo")
+        BarButton(Glyph.Triangle(up = false), WordColors.CollapseIcon, vm::collapsePalette, width = 43.dp, height = ROW, label = "Collapse more options")
     }
 }
 
@@ -222,7 +226,7 @@ internal fun Band() {
 /**
  * A row of the palette: an icon at 16 dp, a label at 50 dp (at 16 dp when [bare]), a chevron when
  * it drills in. Screen readers hear "label menu" (or [description]) for the part that opens a
- * page, as in the reference app.
+ * page, as in the reference app, and [name] (when given) for the main part of a split row.
  */
 @Composable
 internal fun PaletteRow(
@@ -237,11 +241,18 @@ internal fun PaletteRow(
     enabled: Boolean = true,
     bare: Boolean = false,
     description: String? = null,
+    name: String? = null,
 ) {
     Row(Modifier.fillMaxWidth().height(height + 1.dp).background(if (pressed) WordColors.Pressed else WordColors.Surface).bottomEdge(WordColors.Divider), verticalAlignment = Alignment.CenterVertically) {
         val opens = chevron && onOpen == null
         Row(
-            Modifier.weight(1f).fillMaxHeight().clickable(enabled = enabled, onClick = onClick).then(if (opens) Modifier.semantics { contentDescription = description ?: "$label menu" } else Modifier),
+            Modifier.weight(1f).fillMaxHeight().clickable(enabled = enabled, onClick = onClick).then(
+                when {
+                    opens -> Modifier.semantics { contentDescription = description ?: "$label menu" }
+                    name != null -> Modifier.semantics { contentDescription = name }
+                    else -> Modifier
+                },
+            ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Spacer(Modifier.width(16.dp))
@@ -299,10 +310,17 @@ private fun HomeTab(vm: AppViewModel, onFind: () -> Unit) {
     val f = vm.format
     Scrolling {
         Row(Modifier.fillMaxWidth().height(ROW + 1.dp).bottomEdge(WordColors.Divider), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f).fillMaxHeight().clickable { vm.pushPanel("font") }, contentAlignment = Alignment.CenterStart) {
+            Box(
+                Modifier.weight(1f).fillMaxHeight().clickable { vm.pushPanel("font") }.semantics { contentDescription = "Font combo box, ${f?.font.orEmpty()} selected" },
+                contentAlignment = Alignment.CenterStart,
+            ) {
                 Text(f?.font.orEmpty(), color = WordColors.OnSurface, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 16.dp))
             }
-            Box(Modifier.width(95.dp).fillMaxHeight().clickable { vm.pushPanel("size") }, contentAlignment = Alignment.CenterStart) {
+            Box(
+                Modifier.width(95.dp).fillMaxHeight().clickable { vm.pushPanel("size") }
+                    .semantics { contentDescription = "Font Size combo box, ${f?.size?.let(::sizeLabel).orEmpty()} selected" },
+                contentAlignment = Alignment.CenterStart,
+            ) {
                 Text(f?.size?.let(::sizeLabel).orEmpty(), color = WordColors.OnSurface, fontSize = 16.sp, modifier = Modifier.padding(start = 8.dp))
             }
         }
@@ -318,12 +336,14 @@ private fun HomeTab(vm: AppViewModel, onFind: () -> Unit) {
             Glyph.WithBar(LucideIcons.Highlighter.glyph(), hexColor(vm.lastHighlight.second)),
             onClick = { vm.applyHighlight(vm.lastHighlight.first, vm.lastHighlight.second) },
             onOpen = { vm.pushPanel("highlight") },
+            name = vm.colors?.highlights?.firstOrNull { it.name == vm.lastHighlight.first }?.let { "Highlight ${it.label}" },
         )
         PaletteRow(
             "Font Color",
             Glyph.WithBar(Letters.FontColor, hexColor(vm.lastFontColor)),
             onClick = { vm.applyFontColor(vm.lastFontColor) },
             onOpen = { vm.pushPanel("fontColor") },
+            name = vm.colors?.let { c -> (c.theme.flatten() + c.standard).firstOrNull { it.hex.equals(vm.lastFontColor, ignoreCase = true) } }?.let { "Font Color ${it.label}" },
         )
         PaletteRow("Clear Formatting", LucideIcons.RemoveFormatting.glyph(), onClick = { vm.command("format.clear") })
         PaletteRow("More Formatting", LucideIcons.Subscript.glyph(), onClick = { vm.pushPanel("moreFormatting") }, chevron = true)
@@ -371,7 +391,8 @@ internal fun SectionBand(title: String) {
 @Composable
 internal fun ChoiceRow(label: String, selected: Boolean, onClick: () -> Unit, trailing: String? = null, indent: Dp = 43.dp, size: Int = 18, enabled: Boolean = true) {
     Row(
-        Modifier.fillMaxWidth().height(LIST_ROW).background(if (selected) WordColors.Pressed else WordColors.Surface).bottomEdge(WordColors.Divider).clickable(enabled = enabled, onClick = onClick),
+        Modifier.fillMaxWidth().height(LIST_ROW).background(if (selected) WordColors.Pressed else WordColors.Surface).bottomEdge(WordColors.Divider).clickable(enabled = enabled, onClick = onClick)
+            .semantics { contentDescription = "$label list item"; this.selected = selected },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, color = if (enabled) WordColors.OnSurface else WordColors.Disabled, fontSize = size.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = indent))
@@ -589,7 +610,8 @@ private fun ParagraphPanel(vm: AppViewModel) {
         Box(Modifier.fillMaxWidth().height(24.dp), contentAlignment = Alignment.BottomStart) {
             Text("Line Spacing:", color = WordColors.OnSurface, fontSize = 14.sp, modifier = Modifier.padding(start = 16.dp))
         }
-        PaletteRow(f?.lineSpacing ?: "1.0", null, onClick = { vm.pushPanel("lineSpacing") }, chevron = true)
+        val spacing = f?.lineSpacing ?: "1.0"
+        PaletteRow(spacing, null, onClick = { vm.pushPanel("lineSpacing") }, chevron = true, description = "Line Spacing: combo box, $spacing selected")
         val before = (f?.spaceBefore ?: 0f) > 0f
         val after = (f?.spaceAfter ?: 0f) > 0f
         PaletteRow(if (before) "Remove Space Before Paragraph" else "Add Space Before Paragraph", null, onClick = { vm.command("para.addSpaceBefore") })

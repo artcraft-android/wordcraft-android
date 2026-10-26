@@ -542,7 +542,8 @@ private fun ReviewTab(vm: AppViewModel) {
         Band()
         PaletteRow("Track Changes", LucideIcons.FilePenLine.glyph(), onClick = { vm.command("review.trackChanges") }, pressed = r?.trackChanges == true)
         Caption("Display for Review")
-        PaletteRow(MARKUP_VIEWS.firstOrNull { it.first == r?.markup }?.second ?: "All Markup", null, onClick = { vm.pushPanel("displayForReview") }, chevron = true)
+        val markup = MARKUP_VIEWS.firstOrNull { it.first == r?.markup }?.second ?: "All Markup"
+        PaletteRow(markup, null, onClick = { vm.pushPanel("displayForReview") }, chevron = true, description = "Display for Review combo box, $markup selected")
         PaletteRow("Accept", LucideIcons.Check.glyph(), onClick = { vm.command("review.accept") }, onOpen = { vm.pushPanel("accept") })
         PaletteRow("Reject", LucideIcons.X.glyph(), onClick = { vm.command("review.reject") }, onOpen = { vm.pushPanel("reject") })
         CellRow(
