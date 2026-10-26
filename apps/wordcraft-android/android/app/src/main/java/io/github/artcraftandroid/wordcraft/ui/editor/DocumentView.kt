@@ -83,7 +83,21 @@ private const val MAX_ZOOM = 5f
  * its top margin).
  */
 @Stable
-class DocumentViewport(private val pad: Float = 4f, private val gap: Float = 5.5f, private val padTop: Float = pad) {
+/**
+ * The pages' view: where it is scrolled to and how far zoomed. It starts at [startScale] pixels a
+ * point, the first page's left edge at the view's and scrolled [startTop] points down it (past
+ * its top margin), or fitting the page's width when that is 0. With [hundred] (the pixels a point
+ * of 100%) it zooms from 22% to 220% and Zoom In and Out step by tens of percent, as the
+ * reference's pages do.
+ */
+class DocumentViewport(
+    private val pad: Float = 4f,
+    private val gap: Float = 5.5f,
+    private val padTop: Float = pad,
+    private val startScale: Float = 0f,
+    private val startTop: Float = 0f,
+    private val hundred: Float = 0f,
+) {
     var scale by mutableFloatStateOf(0f)
         private set
     var scrollX by mutableFloatStateOf(0f)
@@ -119,7 +133,7 @@ class DocumentViewport(private val pad: Float = 4f, private val gap: Float = 5.5
             y += p.height + gap
         }
         contentH = y - gap + pad
-        if (wasFit && viewW > 0f) scale = fitScale
+        if (scale <= 0f) start() else if (wasFit && viewW > 0f) scale = fitScale
         clamp()
     }
 
@@ -127,8 +141,20 @@ class DocumentViewport(private val pad: Float = 4f, private val gap: Float = 5.5
         val wasFit = scale <= 0f || abs(scale - fitScale) < 0.001f
         viewW = w
         viewH = h
-        if (wasFit && contentW > 0f) scale = fitScale
+        if (scale <= 0f) start() else if (wasFit && contentW > 0f) scale = fitScale
         clamp()
+    }
+
+    /** The first scale, once the pages and the view have sizes. */
+    private fun start() {
+        if (contentW <= 0f || viewW <= 0f) return
+        if (startScale > 0f && startScale.isFinite()) {
+            scale = startScale.coerceIn(minScale, maxScale)
+            scrollX = pad
+            scrollY = startTop.coerceAtLeast(0f)
+        } else {
+            scale = fitScale
+        }
     }
 
     private fun shiftX(): Float = max(0f, (viewW - contentW * scale) / 2f)
@@ -214,7 +240,7 @@ class DocumentViewport(private val pad: Float = 4f, private val gap: Float = 5.5
         if (scale <= 0f || !factor.isFinite() || factor <= 0f) return
         val docX = (focus.x - shiftX()) / scale + scrollX
         val docY = focus.y / scale + scrollY
-        scale = (scale * factor).coerceIn(fitScale * MIN_ZOOM, fitScale * MAX_ZOOM)
+        scale = (scale * factor).coerceIn(minScale, maxScale)
         scrollX = docX - (focus.x - shiftX()) / scale
         scrollY = docY - focus.y / scale
         clamp()
@@ -237,6 +263,21 @@ class DocumentViewport(private val pad: Float = 4f, private val gap: Float = 5.5
     /** Zoom to [s] pixels per point about the middle of the view. */
     fun zoomTo(s: Float) {
         if (scale > 0f && s.isFinite() && s > 0f) zoomBy(s / scale, Offset(viewW / 2f, viewH / 2f))
+    }
+
+    private val minScale: Float get() = if (hundred > 0f) hundred * 0.22f else fitScale * MIN_ZOOM
+    private val maxScale: Float get() = if (hundred > 0f) hundred * 2.2f else fitScale * MAX_ZOOM
+
+    /** Zoom In ([up]) or Out a step: to the next ten percent on the pages, by a quarter elsewhere. */
+    fun zoomStep(up: Boolean) {
+        if (scale <= 0f) return
+        if (hundred <= 0f) {
+            zoomBy(if (up) 1.25f else 0.8f, Offset(viewW / 2f, viewH / 2f))
+            return
+        }
+        val percent = scale / hundred * 100f
+        val next = if (up) (kotlin.math.floor(percent / 10f + 0.001f) + 1f) * 10f else (kotlin.math.ceil(percent / 10f - 0.001f) - 1f) * 10f
+        zoomTo(next.coerceIn(22f, 220f) / 100f * hundred)
     }
 
     /** The page width fills the view (Page Width). */
@@ -331,6 +372,7 @@ fun DocumentView(
     onHandleDrag: (end: String, page: Int, x: Float, y: Float) -> Unit = { _, _, _, _ -> },
     highlights: List<io.github.artcraftandroid.wordcraft.core.PageRect> = emptyList(),
     wordHighlights: List<io.github.artcraftandroid.wordcraft.core.PageRect> = emptyList(),
+    commentMarks: List<io.github.artcraftandroid.wordcraft.core.PageRect> = emptyList(),
     highlightColor: Color = Color(0x4D4C6EF5),
     dark: Boolean = false,
     findMatches: List<io.github.artcraftandroid.wordcraft.core.PageRect> = emptyList(),
@@ -529,6 +571,17 @@ fun DocumentView(
             // the sentence Read Aloud is saying, and the word in it, darker
             for (r in highlights + wordHighlights) {
                 drawRect(highlightColor, topLeft = viewport.onPage(r.page.toInt(), r.x, r.y), size = Size(r.width * viewport.scale, r.height * viewport.scale))
+            }
+            // Mobile View marks a commented line with a speech bubble in the right margin, as the
+            // reference does
+            if (mobile) {
+                val bubble = if (dark) Color(0xFFC8C8C8) else Color(0xFF505050)
+                for (m in commentMarks) {
+                    val w = info.pages.getOrNull(m.page.toInt())?.width ?: continue
+                    // level with the text's middle, above the line's spacing
+                    val c = viewport.onPage(m.page.toInt(), w - COMMENT_MARK_INSET, m.y + m.height * 0.32f)
+                    drawCommentMark(c, COMMENT_MARK_SIZE * viewport.scale, bubble)
+                }
             }
             val pen = ink
             if (pen != null && pen.tool != "eraser" && live.size >= 2) {
@@ -848,4 +901,33 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.panAndZo
             }
         }
     }
+}
+
+/** A comment mark's size and how far in from the page's right edge its middle is, points. */
+private const val COMMENT_MARK_SIZE = 12f
+private const val COMMENT_MARK_INSET = 5.2f
+
+/** An outline speech bubble `size` across, centred on `c`: a rounded box with a tail at the bottom left. */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCommentMark(c: Offset, size: Float, color: Color) {
+    val w = size
+    val h = size * 0.72f
+    val left = c.x - w / 2f
+    val top = c.y - h / 2f - size * 0.08f
+    val r = size * 0.08f
+    val path = androidx.compose.ui.graphics.Path().apply {
+        moveTo(left + r, top)
+        lineTo(left + w - r, top)
+        quadraticTo(left + w, top, left + w, top + r)
+        lineTo(left + w, top + h - r)
+        quadraticTo(left + w, top + h, left + w - r, top + h)
+        lineTo(left + w * 0.42f, top + h)
+        lineTo(left + w * 0.2f, top + h + size * 0.22f)
+        lineTo(left + w * 0.24f, top + h)
+        lineTo(left + r, top + h)
+        quadraticTo(left, top + h, left, top + h - r)
+        lineTo(left, top + r)
+        quadraticTo(left, top, left + r, top)
+        close()
+    }
+    drawPath(path, color, style = Stroke(width = (size * 0.075f).coerceAtLeast(1f), join = androidx.compose.ui.graphics.StrokeJoin.Round))
 }

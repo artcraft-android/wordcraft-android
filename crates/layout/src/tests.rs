@@ -879,6 +879,197 @@ fn right_tab_aligns_text_end() {
     assert!((end - 472.0).abs() < 1.0, "{end}");
 }
 
+/// Mobile View keeps indents and default tab stops in proportion to the screen: the screen's text
+/// width over the page's (measured against the reference on Letter and on A4 with narrow
+/// margins). A set stop stays where it is, unless it is past the line's end: then the text goes
+/// to the next default stop, as the reference does.
+#[test]
+fn mobile_view_scales_indents_and_default_tabs() {
+    use wordcraft_doc::props::{TabAlign, TabStop};
+    let mut d = Document::from_text("indented\na\tb\nset\tstop\tpast");
+    d.last_section.page_w = 612.0;
+    (d.last_section.margin_left, d.last_section.margin_right, d.last_section.gutter) = (72.0, 72.0, 0.0);
+    d.format_paragraphs(&Pos::body(0, 0), &Pos::body(0, 0), &|p| p.indent_left = Some(72.0)).unwrap();
+    d.format_paragraphs(&Pos::body(2, 0), &Pos::body(2, 0), &|p| {
+        p.tabs = Some(vec![
+            TabStop { pos: 144.0, align: TabAlign::Left, leader: Default::default() },
+            TabStop { pos: 288.0, align: TabAlign::Right, leader: Default::default() },
+        ])
+    })
+    .unwrap();
+    let opts = LayoutOptions { view: ViewMode::Web, web_width: 303.2, mobile: true, ..Default::default() };
+    let l = layout(&d, &mut LayoutCache::new(), &opts);
+    let k = (303.2 - 36.0) / 468.0;
+    let x = |para: usize, off: usize| l.caret(&Pos::body(para, off)).unwrap().x - l.caret(&Pos::body(1, 0)).unwrap().x;
+    assert!((x(0, 0) - 72.0 * k).abs() < 0.5, "indent: {}", x(0, 0));
+    assert!((x(1, 2) - 36.0 * k).abs() < 0.5, "default stop: {}", x(1, 2));
+    assert!((x(2, 4) - 144.0).abs() < 0.5, "set stop: {}", x(2, 4));
+    let next = ((x(2, 8) / (36.0 * k)).floor() + 1.0) * 36.0 * k;
+    assert!((x(2, 9) - next).abs() < 0.5, "a set stop past the line's end: {} (next default {next})", x(2, 9));
+    // Print Layout and plain Web Layout keep the file's indents
+    for opts in [LayoutOptions { mobile: true, ..Default::default() }, LayoutOptions { mobile: false, ..opts }] {
+        let l = layout(&d, &mut LayoutCache::new(), &opts);
+        let x0 = l.caret(&Pos::body(0, 0)).unwrap().x - l.caret(&Pos::body(1, 0)).unwrap().x;
+        assert!((x0 - 72.0).abs() < 0.5, "{:?}: {x0}", opts.view);
+    }
+}
+
+/// Mobile View sizes a line of only a picture by the picture, with the spacing's extra below and
+/// no ascent or descent of the text around it (measured against the reference); a line with text
+/// beside the picture keeps the descent, and Print Layout is as before.
+#[test]
+fn mobile_view_lines_of_only_pictures_take_their_height() {
+    use wordcraft_doc::props::LineSpacing;
+    let lay_line = |text: &str, spacing: LineSpacing, mobile: bool, pic: bool| {
+        let mut d = Document::from_text(text);
+        d.format_paragraphs(&Pos::body(0, 0), &Pos::body(0, 0), &|p| p.line_spacing = Some(spacing)).unwrap();
+        if pic {
+            d.insert_object(&Pos::body(0, 0), picture(100.0, 40.0, Default::default()), &Default::default()).unwrap();
+        }
+        let opts = LayoutOptions { view: ViewMode::Web, web_width: 303.2, mobile, ..Default::default() };
+        let l = layout(&d, &mut LayoutCache::new(), &opts);
+        let Some(Placed::Lines { para, .. }) = l.pages[0].items.iter().find(|i| matches!(i, Placed::Lines { .. })) else { panic!() };
+        let first = &para.lines[0];
+        (first.height, first.baseline - first.top)
+    };
+    let line = |text: &str, spacing: LineSpacing, mobile: bool| lay_line(text, spacing, mobile, true);
+    let (h, b) = line("", LineSpacing::Multiple(1.0), true);
+    assert!((h - 40.0).abs() < 0.01 && (b - 40.0).abs() < 0.01, "only the picture: {h} {b}");
+    // the multiple's extra, from the text's natural height, below
+    let natural = lay_line("x", LineSpacing::Multiple(1.0), true, false).0;
+    let (h2, b2) = line("", LineSpacing::Multiple(1.15), true);
+    let extra = lay_line("x", LineSpacing::Multiple(1.15), true, false).0 - natural;
+    assert!(extra > 0.0 && (h2 - 40.0 - extra).abs() < 0.05 && (b2 - 40.0).abs() < 0.01, "{h2} {b2} (extra {extra})");
+    // text beside it keeps its descent under the picture, and the extra goes below that
+    let (with_text, _) = line("x", LineSpacing::Multiple(1.0), true);
+    assert!(with_text > 40.5, "{with_text}");
+    let (with_text2, b3) = line("x", LineSpacing::Multiple(1.15), true);
+    assert!((with_text2 - with_text - extra).abs() < 0.05 && (b3 - 40.0).abs() < 0.01, "{with_text2} vs {with_text} + {extra}");
+    // Print Layout keeps the descent under a picture alone
+    let (print, _) = line("", LineSpacing::Multiple(1.0), false);
+    assert!(print > 40.5, "{print}");
+}
+
+/// Automatic text is read against the fill behind it, as Word chooses it: white on a dark cell or
+/// a dark shaded paragraph, black on a light one.
+#[test]
+fn automatic_text_is_white_on_dark_shading() {
+    use wordcraft_doc::props::Rgb;
+    let navy = Rgb(0x1F, 0x38, 0x64);
+    let mut d = Document::from_text(
+        "Dark paragraph
+Light paragraph
+End",
+    );
+    d.format_paragraphs(&Pos::body(0, 0), &Pos::body(0, 0), &|p| p.shading = Some(navy)).unwrap();
+    d.format_paragraphs(&Pos::body(1, 0), &Pos::body(1, 0), &|p| p.shading = Some(Rgb(0xD9, 0xE2, 0xF3))).unwrap();
+    let mut t = Table::new(1, 2, 300.0);
+    t.rows[0].cells[0].props.shading = Some(navy);
+    t.rows[0].cells[0].blocks = vec![wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text("Navy cell", Default::default()))];
+    t.rows[0].cells[1].blocks = vec![wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text("Plain cell", Default::default()))];
+    d.insert_block(StoryRef::Body, &Path::top(2), wordcraft_doc::Block::Table(t)).unwrap();
+    let l = lay(&d);
+    let glyphs: Vec<(String, Rgb)> = flat(display::page_display(&d, &l.pages[0], &Default::default()))
+        .into_iter()
+        .filter_map(|x| if let display::Draw::Glyphs { text, color, .. } = x { Some((text, color)) } else { None })
+        .collect();
+    let of = |w: &str| glyphs.iter().find(|(t, _)| t.contains(w)).map(|(_, c)| *c);
+    assert_eq!(
+        (of("Dark"), of("Light"), of("Navy"), of("Plain")),
+        (Some(Rgb::WHITE), Some(Rgb::BLACK), Some(Rgb::WHITE), Some(Rgb::BLACK)),
+        "{glyphs:?}"
+    );
+}
+
+/// Word's default cell margins come with Normal Table: a table style not based on it, and setting
+/// none, leaves a cell's text against its sides (as the reference draws such a Table Grid).
+#[test]
+fn cell_margins_come_with_normal_table() {
+    let x_of = |style: &str| {
+        let mut d = Document::from_text("x");
+        d.styles.upsert(wordcraft_doc::Style { id: "Bare".into(), name: "Bare".into(), kind: wordcraft_doc::StyleKind::Table, ..Default::default() });
+        d.styles.upsert(wordcraft_doc::Style {
+            id: "Based".into(),
+            name: "Based".into(),
+            kind: wordcraft_doc::StyleKind::Table,
+            based_on: Some("TableNormal".into()),
+            ..Default::default()
+        });
+        let mut t = Table::new(1, 1, 300.0);
+        t.props.style = Some(style.into());
+        t.rows[0].cells[0].blocks = vec![wordcraft_doc::para_block(wordcraft_doc::Paragraph::with_text("Cell", Default::default()))];
+        d.insert_block(StoryRef::Body, &Path::top(1), wordcraft_doc::Block::Table(t)).unwrap();
+        let l = lay(&d);
+        l.pages[0].items.iter().find_map(|i| if let Placed::Lines { path, x, .. } = i { (path.0.len() == 4).then_some(*x) } else { None }).unwrap()
+    };
+    assert!((x_of("Based") - x_of("Bare") - 5.4).abs() < 0.01, "{} {}", x_of("Based"), x_of("Bare"));
+    // no style: Normal Table's; Table Grid is based on it
+    assert!((x_of("") - x_of("Based")).abs() < 0.01);
+    assert!(x_of("TableGrid") > x_of("Based"));
+}
+
+/// Mobile View narrows a table wider than the screen to fit it, as the reference does; Print
+/// Layout leaves one a little wider than its room as it is.
+#[test]
+fn mobile_view_fits_a_wide_table_to_the_screen() {
+    let width = |mobile: bool| {
+        let mut d = Document::from_text("x");
+        d.insert_block(StoryRef::Body, &Path::top(1), wordcraft_doc::Block::Table(Table::new(1, 2, 300.0))).unwrap();
+        let opts = LayoutOptions { view: ViewMode::Web, web_width: 303.2, mobile, ..Default::default() };
+        let l = layout(&d, &mut LayoutCache::new(), &opts);
+        let cells: Vec<Rect> = l.pages[0].items.iter().filter_map(|i| if let Placed::Cell { rect, .. } = i { Some(*rect) } else { None }).collect();
+        cells.iter().map(|r| r.right()).fold(0.0f32, f32::max) - cells.iter().map(|r| r.x).fold(f32::MAX, f32::min)
+    };
+    assert!((width(true) - (303.2 - 36.0)).abs() < 0.5, "{}", width(true));
+    assert!((width(false) - 300.0).abs() < 0.5, "{}", width(false));
+}
+
+/// Shaded paragraphs one after the other: the first one's shading reaches down to the second's,
+/// over the spacing between, as the reference fills it; before a plain paragraph it stops at the
+/// text.
+#[test]
+fn consecutive_shaded_paragraphs_join_over_their_spacing() {
+    use wordcraft_doc::props::Rgb;
+    let mut d = Document::from_text(
+        "One
+Two
+Three",
+    );
+    d.format_paragraphs(&Pos::body(0, 0), &Pos::body(2, 0), &|p| p.space_after = Some(10.0)).unwrap();
+    d.format_paragraphs(&Pos::body(0, 0), &Pos::body(0, 0), &|p| p.shading = Some(Rgb(0xD9, 0xE2, 0xF3))).unwrap();
+    d.format_paragraphs(&Pos::body(1, 0), &Pos::body(1, 0), &|p| p.shading = Some(Rgb(0x1F, 0x38, 0x64))).unwrap();
+    let l = lay(&d);
+    let fills: Vec<Rect> = display::page_display(&d, &l.pages[0], &Default::default())
+        .into_iter()
+        .filter_map(|x| if let display::Draw::Fill { rect, text_bg: false, .. } = x { Some(rect) } else { None })
+        .collect();
+    assert_eq!(fills.len(), 2, "{fills:?}");
+    assert!((fills[0].bottom() - fills[1].y).abs() < 0.01, "joined: {fills:?}");
+    let tops: Vec<f32> = l.pages[0].items.iter().filter_map(|i| if let Placed::Lines { y, .. } = i { Some(*y) } else { None }).collect();
+    assert!(fills[1].bottom() < tops[2] - 9.0, "the second stops at its text: {fills:?} {tops:?}");
+}
+
+/// Mobile View keeps a picture the text wraps beside floating at the left of its paragraph, its
+/// side distance in, whatever position the page gave it, the text beside it, as the reference
+/// does.
+#[test]
+fn mobile_view_floats_wrapped_pictures_at_the_left_of_their_paragraph() {
+    use wordcraft_doc::para::{Anchor, Float, Wrap};
+    let mut d = Document::from_text(&"The garden gets three new beds this spring and a pond. ".repeat(6));
+    let float = Float { wrap: Wrap::Square, h_rel: Anchor::Margin, v_rel: Anchor::Page, x: 348.0, y: 500.0, dist: 9.0, ..Default::default() };
+    d.insert_object(&Pos::body(0, 0), picture(120.0, 60.0, float), &Default::default()).unwrap();
+    let opts = LayoutOptions { view: ViewMode::Web, web_width: 303.2, mobile: true, ..Default::default() };
+    let l = layout(&d, &mut LayoutCache::new(), &opts);
+    let page = &l.pages[0];
+    let pic = page.items.iter().find_map(|i| if let Placed::Shape { rect, .. } = i { Some(*rect) } else { None }).expect("the picture floats");
+    let Some(Placed::Lines { para, x, y, .. }) = page.items.iter().find(|i| matches!(i, Placed::Lines { .. })) else { panic!() };
+    assert!((pic.x - (x + 9.0)).abs() < 0.5 && (pic.y - y).abs() < 0.5, "{pic:?} at {x} {y}");
+    // the first line runs beside it, the text (after the anchor's mark) clear of it by the
+    // distance
+    let first = para.x_of(0, para.lines[0].start + wordcraft_doc::para::OBJ.len_utf8()).unwrap() + x;
+    assert!(first >= pic.right() + 8.5, "{first} beside {pic:?}");
+}
+
 #[test]
 fn lists_get_labels_and_indent() {
     let mut d = Document::from_text("one\ntwo\nthree");
@@ -4164,9 +4355,15 @@ fn graphic_text_in_a_degenerate_rectangle_is_not_drawn() {
     assert!(!draws.iter().any(|x| matches!(x, display::Draw::Glyphs { text, .. } if text == "Q1")));
 }
 
-/// The draws with figures opened up.
+/// The draws with figures and kept groups (a dark page leaves their colours) opened up.
 fn flat(draws: Vec<display::Draw>) -> Vec<display::Draw> {
-    draws.into_iter().flat_map(|x| if let display::Draw::Figure { draws, .. } = x { draws } else { vec![x] }).collect()
+    draws
+        .into_iter()
+        .flat_map(|x| match x {
+            display::Draw::Figure { draws, .. } | display::Draw::Kept { items: draws } => flat(draws),
+            x => vec![x],
+        })
+        .collect()
 }
 
 #[test]
@@ -4237,6 +4434,43 @@ fn graphic_items_scale_with_their_frame() {
         .expect("a shape");
     assert!((r.w - 500.0).abs() < 1e-3 && (r.h - 250.0).abs() < 1e-3, "{r:?}");
     assert!((stroke - 2.0).abs() < 1e-5, "stroke {stroke}");
+}
+
+/// Word counts the spacing after a box's last paragraph when it centres the box's text: the text
+/// sits half that spacing above the middle (measured against the reference).
+#[test]
+fn centred_text_box_text_counts_the_spacing_after() {
+    let top_of = |after: f32| {
+        let mut d = Document::from_text("Before");
+        let mut p = wordcraft_doc::Paragraph::with_text("Middle", Default::default());
+        p.props.space_after = Some(after);
+        let id = d.add_part(wordcraft_doc::PartKind::TextBox, vec![wordcraft_doc::para_block(p)]);
+        if let Some(part) = d.parts.get_mut(&id) {
+            part.body.anchor = wordcraft_doc::props::VAlign::Center;
+        }
+        let shape = InlineObject::Shape {
+            kind: wordcraft_doc::para::ShapeKind::TextBox,
+            w: 144.0,
+            h: 72.0,
+            fill: None,
+            stroke: None,
+            stroke_width: 0.75,
+            float: Default::default(),
+            story: Some(id),
+            freeform: None,
+            effects: Default::default(),
+            extra: Default::default(),
+        };
+        d.insert_object(&Pos::body(0, 0), shape, &Default::default()).unwrap();
+        let l = lay(&d);
+        l.pages[0]
+            .items
+            .iter()
+            .find_map(|i| if let Placed::Lines { story: StoryRef::Part(s), y, .. } = i { (*s == id).then_some(*y) } else { None })
+            .unwrap()
+    };
+    let (without, with) = (top_of(0.0), top_of(16.0));
+    assert!((without - with - 8.0).abs() < 0.01, "{without} {with}");
 }
 
 #[test]
@@ -4694,7 +4928,7 @@ fn rotated_group_turns_its_members_and_their_shadows() {
     let shadows: Vec<f32> = crate::display::page_display(&d, p, &Default::default())
         .iter()
         .filter_map(|d| match d {
-            crate::display::Draw::Rotated { items, .. } => items.iter().find_map(|i| match i {
+            crate::display::Draw::Rotated { items, .. } => flat(items.clone()).into_iter().find_map(|i| match i {
                 crate::display::Draw::Shape { effects, .. } => effects.shadow.map(|s| s.angle),
                 _ => None,
             }),
@@ -5199,14 +5433,14 @@ fn rotated_canvas_draws_its_clipped_members_inside_the_turn() {
         for d in draws {
             let Draw::Rotated { spin, items, .. } = d else { continue };
             turns.push(spin.deg);
-            for i in items {
+            for i in &flat(items.clone()) {
                 match i {
                     Draw::Shape { rect, fill: Some(c), .. } if c.0 == 0xF0 => bgs.push(*rect),
                     Draw::Clip { rect, items } => {
                         let members = items
                             .iter()
                             .map(|m| match m {
-                                Draw::Rotated { spin, items, .. } => match items.first() {
+                                Draw::Rotated { spin, items, .. } => match flat(items.clone()).first() {
                                     Some(Draw::Shape { rect, .. }) => (*rect, spin.deg),
                                     o => panic!("{o:?}"),
                                 },

@@ -23,6 +23,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
@@ -35,7 +37,7 @@ import io.github.artcraftandroid.wordcraft.core.FormatState
 import io.github.artcraftandroid.wordcraft.ui.LucideIcons
 import io.github.artcraftandroid.wordcraft.ui.WordColors
 
-/** A tappable icon of the bars. */
+/** A tappable icon of the bars, named `label` for screen readers. */
 @Composable
 fun BarButton(
     glyph: Glyph,
@@ -48,12 +50,14 @@ fun BarButton(
     iconSize: Dp = 24.dp,
     pressed: Boolean = false,
     disabledTint: Color = WordColors.Disabled,
+    label: String? = null,
 ) {
     Box(
         modifier
             .size(width, height)
             .background(if (pressed) WordColors.Pressed else Color.Transparent)
-            .clickable(enabled = enabled, onClick = onClick),
+            .clickable(enabled = enabled, onClick = onClick)
+            .semantics { if (label != null) contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
         GlyphIcon(glyph, if (enabled) tint else disabledTint, size = iconSize)
@@ -71,12 +75,12 @@ private val BAR_BUTTON = 48.dp
 @Composable
 fun ViewTopBar(title: String, onClose: () -> Unit, onEdit: () -> Unit, onShare: () -> Unit, onFind: () -> Unit, onMore: () -> Unit) {
     Row(Modifier.fillMaxWidth().height(BAR_HEIGHT).background(WordColors.Bar).padding(end = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-        BarButton(LucideIcons.X.glyph(), WordColors.OnBar, onClose, width = BAR_HEIGHT, height = BAR_HEIGHT)
+        BarButton(LucideIcons.X.glyph(), WordColors.OnBar, onClose, width = BAR_HEIGHT, height = BAR_HEIGHT, label = "Close")
         Text(title, color = WordColors.OnBar, fontSize = 19.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        BarButton(LucideIcons.PenLine.glyph(), WordColors.OnBar, onEdit, width = BAR_BUTTON, height = BAR_HEIGHT)
-        BarButton(LucideIcons.Share2.glyph(), WordColors.OnBar, onShare, width = BAR_BUTTON, height = BAR_HEIGHT)
-        BarButton(LucideIcons.Search.glyph(), WordColors.OnBar, onFind, width = BAR_BUTTON, height = BAR_HEIGHT)
-        BarButton(LucideIcons.Ellipsis.glyph(), WordColors.OnBar, onMore, width = BAR_BUTTON, height = BAR_HEIGHT)
+        BarButton(LucideIcons.PenLine.glyph(), WordColors.OnBar, onEdit, width = BAR_BUTTON, height = BAR_HEIGHT, label = "Edit")
+        BarButton(LucideIcons.Share2.glyph(), WordColors.OnBar, onShare, width = BAR_BUTTON, height = BAR_HEIGHT, label = "Share")
+        BarButton(LucideIcons.Search.glyph(), WordColors.OnBar, onFind, width = BAR_BUTTON, height = BAR_HEIGHT, label = "Find")
+        BarButton(LucideIcons.Ellipsis.glyph(), WordColors.OnBar, onMore, width = BAR_BUTTON, height = BAR_HEIGHT, label = "More Options")
     }
 }
 
@@ -97,15 +101,15 @@ fun EditTopBar(
     onMore: () -> Unit,
 ) {
     Row(Modifier.fillMaxWidth().height(BAR_HEIGHT).shadow(2.dp).background(WordColors.Bar).padding(end = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-        BarButton(LucideIcons.Check.glyph(), WordColors.OnBar, onDone, width = BAR_HEIGHT, height = BAR_HEIGHT)
+        BarButton(LucideIcons.Check.glyph(), WordColors.OnBar, onDone, width = BAR_HEIGHT, height = BAR_HEIGHT, label = "Done")
         Spacer(Modifier.weight(1f))
-        BarButton(LucideIcons.PenTool.glyph(), WordColors.OnBar, onShowCommands, width = BAR_BUTTON, height = BAR_HEIGHT)
-        BarButton(LucideIcons.Share2.glyph(), WordColors.OnBar, onShare, width = BAR_BUTTON, height = BAR_HEIGHT)
-        BarButton(LucideIcons.Search.glyph(), WordColors.OnBar, onFind, width = BAR_BUTTON, height = BAR_HEIGHT)
+        BarButton(LucideIcons.PenTool.glyph(), WordColors.OnBar, onShowCommands, width = BAR_BUTTON, height = BAR_HEIGHT, label = "Show Commands")
+        BarButton(LucideIcons.Share2.glyph(), WordColors.OnBar, onShare, width = BAR_BUTTON, height = BAR_HEIGHT, label = "Share")
+        BarButton(LucideIcons.Search.glyph(), WordColors.OnBar, onFind, width = BAR_BUTTON, height = BAR_HEIGHT, label = "Find")
         // it shows the other view: the pages while in Mobile View, Mobile View while on the pages
-        BarButton((if (mobileView) LucideIcons.FileText else LucideIcons.Smartphone).glyph(), WordColors.OnBar, onMobileView, width = BAR_BUTTON, height = BAR_HEIGHT)
-        BarButton(LucideIcons.Undo2.glyph(), WordColors.OnBar, onUndo, enabled = canUndo, width = BAR_BUTTON, height = BAR_HEIGHT)
-        BarButton(LucideIcons.Ellipsis.glyph(), WordColors.OnBar, onMore, width = BAR_BUTTON, height = BAR_HEIGHT)
+        BarButton((if (mobileView) LucideIcons.FileText else LucideIcons.Smartphone).glyph(), WordColors.OnBar, onMobileView, width = BAR_BUTTON, height = BAR_HEIGHT, label = if (mobileView) "Print View" else "Mobile View")
+        BarButton(LucideIcons.Undo2.glyph(), WordColors.OnBar, onUndo, enabled = canUndo, width = BAR_BUTTON, height = BAR_HEIGHT, label = "Undo")
+        BarButton(LucideIcons.Ellipsis.glyph(), WordColors.OnBar, onMore, width = BAR_BUTTON, height = BAR_HEIGHT, label = "More Options")
     }
 }
 
@@ -233,10 +237,10 @@ fun ViewPill(mobileView: Boolean, onToggleView: () -> Unit, onReadAloud: () -> U
     Surface(modifier, shape = RoundedCornerShape(28.dp), color = WordColors.Bar, shadowElevation = if (WordColors.dark) 0.dp else 6.dp) {
         Row(Modifier.height(56.dp).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             // the button shows the other view
-            BarButton((if (mobileView) LucideIcons.FileText else LucideIcons.Smartphone).glyph(), WordColors.OnPill, onToggleView, width = 55.dp, height = 56.dp)
-            BarButton(LucideIcons.AudioLines.glyph(), WordColors.OnPill, onReadAloud, width = 55.dp, height = 56.dp)
-            BarButton(LucideIcons.MessageSquare.glyph(), WordColors.OnPill, onComments, width = 55.dp, height = 56.dp)
-            BarButton(LucideIcons.Share2.glyph(), WordColors.OnPill, onShare, width = 55.dp, height = 56.dp)
+            BarButton((if (mobileView) LucideIcons.FileText else LucideIcons.Smartphone).glyph(), WordColors.OnPill, onToggleView, width = 55.dp, height = 56.dp, label = if (mobileView) "Print View" else "Mobile View")
+            BarButton(LucideIcons.AudioLines.glyph(), WordColors.OnPill, onReadAloud, width = 55.dp, height = 56.dp, label = "Read Aloud")
+            BarButton(LucideIcons.MessageSquare.glyph(), WordColors.OnPill, onComments, width = 55.dp, height = 56.dp, label = "Comments")
+            BarButton(LucideIcons.Share2.glyph(), WordColors.OnPill, onShare, width = 55.dp, height = 56.dp, label = "Share")
         }
     }
 }

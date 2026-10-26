@@ -462,7 +462,7 @@ fn repeated_words(text: &str, ws: &[(usize, usize)], v: &mut Vec<Issue>) {
             && w0.to_lowercase() == w1.to_lowercase()
             && !ALLOWED_REPEATS.contains(&w0.to_lowercase().as_str())
         {
-            v.push(issue(*a0, *b1, format!("Повтор слова: «{w1}»"), vec![w0.to_string()]));
+            v.push(Issue { kind: IssueKind::Repeated, ..issue(*a0, *b1, format!("Повтор слова: «{w1}»"), vec![w0.to_string()]) });
         }
     }
 }
@@ -621,7 +621,7 @@ mod tests {
         assert_eq!(v.len(), 2, "{v:?}");
         assert_eq!(v[0].message, "Повтор слова: «в»");
         assert_eq!(v[0].suggestions, ["в"]);
-        assert!(v.iter().all(|i| i.lang == ProofLang::Ru && i.kind == IssueKind::Grammar));
+        assert!(v.iter().all(|i| i.lang == ProofLang::Ru && matches!(i.kind, IssueKind::Grammar | IssueKind::Repeated)));
         clean("Да да, так так. Ха ха! Очень очень давно.");
     }
 

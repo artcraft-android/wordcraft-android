@@ -65,7 +65,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("review.spelling", "Spelling & Grammar", "Review › Proofing", next_issue)
             .key(super::mac_or("F7 / Alt+F7 / Mod+Alt+L", "F7 / Alt+F7"))
             .pure(),
-        CommandSpec::new("review.issues", "Proofing Issues", "Review › Proofing", all_issues).pure(),
+        CommandSpec::new("review.issues", "Proofing Issues", "Review › Proofing", all_issues).params(r#"{"grammar"?: bool (default true; false: spelling and repeated words only)}"#).pure(),
         CommandSpec::new("review.suggestions", "Spelling Suggestions", "Review › Proofing", suggestions).params(r#"{"pos"?: Pos}"#).pure(),
         CommandSpec::new("review.addToDictionary", "Add to Dictionary", "Review › Proofing", |s, v| {
             let w = match p::str(v, "word") {
@@ -887,10 +887,14 @@ fn next_issue(s: &mut Session, _: &Value) -> CmdResult {
     Ok(json!({"done": true}))
 }
 
-fn all_issues(s: &mut Session, _: &Value) -> CmdResult {
+fn all_issues(s: &mut Session, v: &Value) -> CmdResult {
+    let grammar = p::bool(v, "grammar").unwrap_or(true);
     let mut out = Vec::new();
     for path in s.doc.para_paths(StoryRef::Body) {
         for (a, b, i) in para_issues(s, StoryRef::Body, &path) {
+            if !grammar && i.kind == wordcraft_proof::IssueKind::Grammar {
+                continue;
+            }
             out.push(issue_json(s, &a, &b, &i));
             if out.len() >= 500 {
                 return Ok(Value::Array(out));
@@ -1037,7 +1041,11 @@ mod tests {
         let l = s.layout();
         let page = &l.pages[0];
         let opts = DisplayOptions { revisions: s.prefs.markup.clone(), ..Default::default() };
-        (page_display(&s.doc, page, &opts), page.body.x)
+        // with the groups a dark page leaves alone (shapes, filled text boxes) opened up
+        fn opened(d: Vec<Draw>) -> Vec<Draw> {
+            d.into_iter().flat_map(|x| if let Draw::Kept { items } = x { opened(items) } else { vec![x] }).collect()
+        }
+        (opened(page_display(&s.doc, page, &opts)), page.body.x)
     }
 
     fn glyph_colors(d: &[Draw]) -> Vec<(wordcraft_doc::Rgb, bool)> {
@@ -1046,6 +1054,30 @@ mod tests {
 
     fn lines(d: &[Draw]) -> Vec<(f32, f32, f32, f32)> {
         d.iter().filter_map(|x| if let Draw::Line { x0, y0, x1, y1, .. } = x { Some((*x0, *y0, *x1, *y1)) } else { None }).collect()
+    }
+
+    /// Changed lines one after another make one bar beside them, over the spacing between their
+    /// paragraphs, as the phone app draws it; an unchanged line between breaks it.
+    #[test]
+    fn change_bars_join_over_consecutive_changed_lines() {
+        let mut s = Session::new(Document::new());
+        s.view.proofing = false;
+        s.run(
+            "document.setText",
+            &json!({"text": "one
+two
+three
+four"}),
+        )
+        .unwrap();
+        s.run("review.trackChanges", &json!({"value": true})).unwrap();
+        for word in ["one", "two", "four"] {
+            s.run("select.text", &json!({"text": word})).unwrap();
+            s.run("text.insert", &json!({"text": "new"})).unwrap();
+        }
+        let (d, body_x) = draws(&mut s);
+        let bars: Vec<_> = lines(&d).into_iter().filter(|(x0, _, x1, _)| x0 == x1 && *x0 < body_x).collect();
+        assert_eq!(bars.len(), 2, "one bar beside one and two, one beside four: {bars:?}");
     }
 
     /// #328: Track Changes Options change how an insertion and a deletion are drawn, the bar

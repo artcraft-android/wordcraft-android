@@ -185,6 +185,9 @@ pub struct DisplayOptions {
     pub hide_ink: bool,
     /// How tracked changes and comments are marked when `markup` is on (Track Changes Options).
     pub revisions: MarkupOptions,
+    /// What is behind the text being drawn where it has no shading of its own: a filled text
+    /// box's fill, which automatic text is read against (white on a dark fill).
+    pub ground: Option<Rgb>,
 }
 
 impl Default for DisplayOptions {
@@ -199,6 +202,7 @@ impl Default for DisplayOptions {
             placeholders: false,
             hide_ink: false,
             revisions: MarkupOptions::default(),
+            ground: None,
         }
     }
 }
@@ -346,7 +350,7 @@ pub const MOVE_COLOR: Rgb = Rgb(0x1A, 0x7F, 0x37);
 /// Colour for revisions by author index.
 pub fn revision_color(i: u32) -> Rgb {
     const C: [Rgb; 6] =
-        [Rgb(0xB0, 0x1E, 0x8F), Rgb(0x1E, 0x6E, 0xB0), Rgb(0x2E, 0x8B, 0x3E), Rgb(0xC0, 0x5A, 0x10), Rgb(0x70, 0x3C, 0xB0), Rgb(0x0E, 0x7C, 0x86)];
+        [Rgb(0xA8, 0x28, 0x40), Rgb(0x1E, 0x6E, 0xB0), Rgb(0x2E, 0x8B, 0x3E), Rgb(0xC0, 0x5A, 0x10), Rgb(0x70, 0x3C, 0xB0), Rgb(0x0E, 0x7C, 0x86)];
     C.get(i as usize % C.len()).copied().unwrap_or(C[0])
 }
 
@@ -368,13 +372,25 @@ pub fn page_display(doc: &Document, page: &Page, opts: &DisplayOptions) -> Vec<D
     for (items, a) in [(&page.header, ha), (&page.footer, ha), (&page.items, ba)] {
         let warps = warped_boxes(doc, items);
         let clips = clipped_cells(items);
+        let grounds = box_grounds(doc, items);
+        // shaded cells' and paragraphs' fills, which automatic text is read against
+        let fills: Vec<(Rect, Rgb)> =
+            items.iter().filter_map(|i| if let Placed::Fill { rect, color } = i { Some((*rect, *color)) } else { None }).collect();
+        let joined = joined_fills(items);
         let mut done: Vec<u32> = Vec::new();
-        for it in items.iter() {
+        for (k, it) in items.iter().enumerate() {
+            if let (Placed::Fill { rect, color }, Some((_, h))) = (it, joined.iter().find(|(j, _)| *j == k)) {
+                out.push(Draw::Fill { rect: Rect::new(rect.x, rect.y, rect.w, *h), color: *color, alpha: a, text_bg: false });
+                continue;
+            }
+            let behind = fill_behind(&fills, it);
+            let shaded = behind.map(|g| DisplayOptions { ground: Some(g), ..opts.clone() });
+            let lopts = shaded.as_ref().unwrap_or(opts);
             if let Placed::Lines { story, path, .. } = it
                 && let Some(rect) = cell_clip(&clips, *story, &path.0)
             {
                 let mut inner = Vec::new();
-                item(doc, it, opts, a, &mut inner);
+                item(doc, it, lopts, a, &mut inner);
                 out.push(Draw::Clip { rect, items: inner });
                 continue;
             }
@@ -391,7 +407,16 @@ pub fn page_display(doc: &Document, page: &Page, opts: &DisplayOptions) -> Vec<D
                         warped_text(doc, &lines, *rect, warp, opts, a, &mut out);
                     }
                 }
-                _ => item(doc, it, opts, a, &mut out),
+                // a filled text box's text: read against its fill, and kept in its colours on a
+                // dark page as the box is (the reference draws both as the document has them)
+                Placed::Lines { story: StoryRef::Part(id), .. } if grounds.iter().any(|(b, _)| b == id) => {
+                    let ground = behind.or(grounds.iter().find(|(b, _)| b == id).map(|(_, f)| *f));
+                    let boxed = DisplayOptions { ground, ..opts.clone() };
+                    let mut inner = Vec::new();
+                    item(doc, it, &boxed, a, &mut inner);
+                    out.push(Draw::Kept { items: inner });
+                }
+                _ => item(doc, it, lopts, a, &mut out),
             }
         }
     }
@@ -477,6 +502,62 @@ fn warped_boxes(doc: &Document, items: &[Placed]) -> Vec<(u32, Rect, wordcraft_d
         .collect()
 }
 
+/// Shaded paragraphs one after the other: each one's shading reaches down to the next one's, over
+/// the spacing between them, as the reference fills it (a shaded paragraph before a plain one
+/// keeps its spacing after unshaded). By item index, the fill's new height.
+fn joined_fills(items: &[Placed]) -> Vec<(usize, f32)> {
+    // each paragraph shading: its fill's index and rect, its paragraph's story and path, and
+    // whether the paragraph ends there
+    let shaded: Vec<(usize, Rect, StoryRef, &Path, bool)> = items
+        .windows(2)
+        .enumerate()
+        .filter_map(|(k, w)| match w {
+            [Placed::Fill { rect, .. }, Placed::Lines { story, path, para, l1, .. }] => Some((k, *rect, *story, path, *l1 >= para.lines.len())),
+            _ => None,
+        })
+        .collect();
+    let mut out = Vec::new();
+    for (a, b) in shaded.iter().zip(shaded.iter().skip(1)) {
+        let (Some((last_a, pre_a)), Some((last_b, pre_b))) = (a.3.0.split_last(), b.3.0.split_last()) else { continue };
+        let next = a.2 == b.2 && pre_a == pre_b && last_a.checked_add(1) == Some(*last_b);
+        let gap = b.1.y - a.1.bottom();
+        let side_by_side = a.1.x < b.1.right() && b.1.x < a.1.right();
+        if a.4 && next && side_by_side && (0.0..=144.0).contains(&gap) {
+            out.push((a.0, b.1.y - a.1.y));
+        }
+    }
+    out
+}
+
+/// The fill drawn behind the first line of `it` (a shaded cell's or paragraph's, the topmost),
+/// if it is lines: what their automatic text is read against.
+fn fill_behind(fills: &[(Rect, Rgb)], it: &Placed) -> Option<Rgb> {
+    let Placed::Lines { para, l0, x, y, .. } = it else { return None };
+    let mid = wordcraft_geom::Point::new(x + 0.5, y + para.lines.get(*l0).map_or(0.0, |l| l.height / 2.0));
+    fills.iter().rev().find(|(r, _)| r.contains(mid)).map(|(_, c)| *c)
+}
+
+/// The text boxes among `items` with a fill their text is drawn over, by story, with the fill.
+/// A fill mostly see-through doesn't count: the text is read against the page.
+fn box_grounds(doc: &Document, items: &[Placed]) -> Vec<(u32, Rgb)> {
+    items
+        .iter()
+        .filter_map(|it| {
+            let Placed::Object { story, path, off, text_box: Some(id), .. } = it else { return None };
+            match doc.para(*story, path)?.object_at(*off)? {
+                InlineObject::Shape { fill: Some(f), extra, .. } if extra.fill_opacity() >= 0.5 => Some((*id, *f)),
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+/// A shape's draws, which a dark page leaves in the document's colours, as the reference leaves
+/// shapes, text boxes and lines; ink turns light with the text.
+fn kept_shape(freeform: Option<&wordcraft_doc::freeform::Freeform>, items: Vec<Draw>) -> Vec<Draw> {
+    if items.is_empty() || freeform.is_some_and(|f| f.ink.is_some()) { items } else { vec![Draw::Kept { items }] }
+}
+
 /// The text of a warped text box at `rect`: its lines' letters as outlines bent by `warp`, the
 /// box's text stretched over the frame inside its margins (as WordArt is). Underlines, marks and
 /// other decorations are left out; a warp that is drawn flat leaves the text as it is.
@@ -526,7 +607,9 @@ fn warped_text(
 }
 
 /// The automatic colour of the bars beside changed lines.
-pub const CHANGE_BAR: Rgb = Rgb(0x50, 0x50, 0x50);
+pub const CHANGE_BAR: Rgb = Rgb(0x70, 0x70, 0x70);
+/// The light grey behind commented text, as the phone app shades it.
+const COMMENT_SHADE: Rgb = Rgb(0xE8, 0xE8, 0xE8);
 /// The colour of Simple Markup's bars.
 pub const SIMPLE_MARKUP_BAR: Rgb = Rgb(0xD1, 0x34, 0x38);
 
@@ -541,6 +624,10 @@ fn change_bars(doc: &Document, page: &Page, m: &MarkupOptions, alpha: f32, out: 
     };
     let bx = if right { page.body.right() + 9.0 } else { page.body.x - 9.0 };
     let color = m.changed_lines_color.unwrap_or(CHANGE_BAR);
+    // changed lines one after another make one bar, over the spacing between their paragraphs
+    // too, as the phone app draws it
+    let mut bar: Option<(f32, f32)> = None;
+    let mut bars = Vec::new();
     for it in &page.items {
         let Placed::Lines { story, path, para: pl, l0, l1, y, turn, .. } = it else { continue };
         if turn.is_turned() {
@@ -559,21 +646,20 @@ fn change_bars(doc: &Document, page: &Page, m: &MarkupOptions, alpha: f32, out: 
                     .filter_map(|k| pl.clusters.get(k).and_then(|c| pl.styles.get(c.style as usize)))
                     .any(|st| (text && (st.rc.ins.is_some() || st.rc.del.is_some())) || (fmt && st.rc.fmt.is_some()))
                 || (mark_rev && line.end == LineEnd::Para);
-            if changed {
-                let top = y + (line.top - first.top);
-                out.push(Draw::Line {
-                    x0: bx,
-                    y0: top,
-                    x1: bx,
-                    y1: top + line.height,
-                    width: 0.75,
-                    color,
-                    stroke: Stroke::Solid,
-                    alpha,
-                    text_bg: None,
-                });
+            let top = y + (line.top - first.top);
+            match (changed, bar) {
+                (true, Some((t, b))) if top >= b - 0.01 && top - b < 72.0 => bar = Some((t, top + line.height)),
+                (true, _) => {
+                    bars.extend(bar);
+                    bar = Some((top, top + line.height));
+                }
+                (false, _) => bars.extend(bar.take()),
             }
         }
+    }
+    bars.extend(bar);
+    for (y0, y1) in bars {
+        out.push(Draw::Line { x0: bx, y0, x1: bx, y1, width: 0.75, color, stroke: Stroke::Solid, alpha, text_bg: None });
     }
 }
 
@@ -631,7 +717,7 @@ fn item_in(doc: &Document, it: &Placed, opts: &DisplayOptions, alpha: f32, outer
             let mut items = Vec::new();
             let fx = effects_in(*effects, spin.within(outer));
             shape_draws(*rect, *kind, *fill, *stroke, *stroke_width, fx, freeform.as_deref(), extra, opts, &mut items);
-            spun(*spin, *rect, reflected(*rect, effects, items), out)
+            spun(*spin, *rect, kept_shape(freeform.as_deref(), reflected(*rect, effects, items)), out)
         }
         // one figure, as an inline one is (a dark page leaves its colours alone)
         Placed::Graphic { rect, graphic, spin, .. } => {
@@ -710,12 +796,7 @@ fn lines(
                 }
                 for (x0, x1) in pl.x_spans(li, a.max(line.start), b.min(line.stop)) {
                     if x1 > x0 {
-                        out.push(Draw::Fill {
-                            rect: Rect::new(x + x0, top, x1 - x0, line.height),
-                            color: Rgb(0xEF, 0xE3, 0xF7),
-                            alpha,
-                            text_bg: false,
-                        });
+                        out.push(Draw::Fill { rect: Rect::new(x + x0, top, x1 - x0, line.height), color: COMMENT_SHADE, alpha, text_bg: false });
                     }
                 }
             }
@@ -780,7 +861,7 @@ fn lines(
                     face: st.face,
                     size: st.size,
                     glyphs: lab.glyphs.get(run.glyphs.clone()).into_iter().flatten().map(|g| (g.gid, gx + g.dx, base - st.shift - g.dy)).collect(),
-                    color: text_color(&st.rc.color, None),
+                    color: text_color(&st.rc.color, opts.ground),
                     alpha,
                     synth_bold: st.synth_bold,
                     synth_italic: st.synth_italic,
@@ -800,7 +881,7 @@ fn lines(
                 face: st.face,
                 size: st.size,
                 glyphs: vec![(gid, hx, base - st.shift)],
-                color: text_color(&st.rc.color, None),
+                color: text_color(&st.rc.color, opts.ground),
                 alpha,
                 synth_bold: st.synth_bold,
                 synth_italic: st.synth_italic,
@@ -919,7 +1000,7 @@ fn lines(
                 (Some(_), _) if moved_to => MOVE_COLOR,
                 (Some(r), _) => m.insert_color.unwrap_or_else(|| author(r)),
                 (None, Some(r)) => m.delete_color.unwrap_or_else(|| author(r)),
-                _ => text_color(&rc.color, rc.shading.or(rc.highlight)),
+                _ => text_color(&rc.color, rc.shading.or(rc.highlight).or(opts.ground)),
             };
             // The highlight or shading drawn under this run (as filled in the backgrounds pass).
             let text_bg = rc.highlight.or(rc.shading);
@@ -1074,7 +1155,7 @@ fn lines(
                 face: st.face,
                 size: st.size,
                 glyphs,
-                color: text_color(&st.rc.color, None),
+                color: text_color(&st.rc.color, opts.ground),
                 alpha,
                 synth_bold: false,
                 synth_italic: false,
@@ -1124,7 +1205,7 @@ fn lines(
                 rect,
                 kind: e.kind,
                 fill: None,
-                stroke: Some(text_color(&st.rc.color, None)),
+                stroke: Some(text_color(&st.rc.color, opts.ground)),
                 stroke_width: e.stroke,
                 effects: Default::default(),
                 corner: None,
@@ -1149,7 +1230,7 @@ fn lines(
                     face: st.face,
                     size: st.size,
                     glyphs: run.iter().map(|(_, g)| (g.gid, cx + g.dx, y - g.dy)).collect(),
-                    color: text_color(&st.rc.color, st.rc.shading.or(st.rc.highlight)),
+                    color: text_color(&st.rc.color, st.rc.shading.or(st.rc.highlight).or(opts.ground)),
                     alpha,
                     synth_bold: st.synth_bold,
                     synth_italic: st.synth_italic,
@@ -2077,7 +2158,7 @@ fn object_draws(o: &InlineObject, rect: Rect, outer: Spin, alpha: f32, opts: &Di
             let fx = effects_in(*effects, own.within(outer));
             let mut items = Vec::new();
             shape_draws(rect, *kind, *fill, *stroke, *stroke_width, fx, freeform.as_deref(), extra, opts, &mut items);
-            spun(own, rect, reflected(rect, effects, items), out)
+            spun(own, rect, kept_shape(freeform.as_deref(), reflected(rect, effects, items)), out)
         }
         InlineObject::Group { .. } => {
             let mut members = Vec::new();

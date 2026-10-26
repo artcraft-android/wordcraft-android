@@ -311,11 +311,13 @@ private fun CellAlignPanel(vm: AppViewModel) {
             Triple(LucideIcons.AlignLeft.glyph(), f?.align == "left") { vm.command("para.alignLeft") },
             Triple(LucideIcons.AlignCenter.glyph(), f?.align == "center") { vm.command("para.alignCenter") },
             Triple(LucideIcons.AlignRight.glyph(), f?.align == "right") { vm.command("para.alignRight") },
+            labels = listOf("Align Left", "Center", "Align Right"),
         )
         CellRow(
             *listOf("top", "middle", "bottom").map { v ->
                 Triple(Glyph.CellLines(v) as Glyph, f?.cellValign == v) { vm.command("table.cellAlign", json("value" to v)) }
             }.toTypedArray(),
+            labels = listOf("Align Top", "Align Middle", "Align Bottom"),
         )
     }
 }
@@ -595,11 +597,13 @@ private fun ShapeTextPanel(vm: AppViewModel) {
             Triple(LucideIcons.AlignLeft.glyph(), false) { vm.command("para.alignLeft") },
             Triple(LucideIcons.AlignCenter.glyph(), false) { vm.command("para.alignCenter") },
             Triple(LucideIcons.AlignRight.glyph(), false) { vm.command("para.alignRight") },
+            labels = listOf("Align Left", "Center", "Align Right"),
         )
         CellRow(
             Triple(Glyph.Letters("⤒"), false) { vm.command("shape.alignText", json("anchor" to "t")) },
             Triple(Glyph.Letters("↕"), false) { vm.command("shape.alignText", json("anchor" to "ctr")) },
             Triple(Glyph.Letters("⤓"), false) { vm.command("shape.alignText", json("anchor" to "b")) },
+            labels = listOf("Top", "Middle", "Bottom"),
         )
         PaletteRow("Text Rotation", LucideIcons.RotateCcwSquare.glyph(), onClick = { vm.command("shape.textDirection", json("dir" to "vert")) })
     }

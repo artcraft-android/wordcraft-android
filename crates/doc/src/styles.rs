@@ -418,6 +418,9 @@ pub struct TableStyleProps {
     pub para: ParaProps,
     pub chr: CharProps,
     pub parts: TableStyleParts,
+    /// The chain reaches the default table style (Normal Table), which gives Word's default cell
+    /// margins; a style not based on it has none of its own.
+    pub normal: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -703,6 +706,7 @@ impl StyleSheet {
             id: "TableGrid".into(),
             name: "Table Grid".into(),
             kind: StyleKind::Table,
+            based_on: Some("TableNormal".into()),
             para: ParaProps { space_after: Some(0.0), line_spacing: Some(LineSpacing::Multiple(1.0)), ..para() },
             priority: Some(59),
             builtin: true,
@@ -763,7 +767,7 @@ impl StyleSheet {
         if chain.last().is_none_or(|s| s.id != id) {
             return None;
         }
-        let mut out = TableStyleProps::default();
+        let mut out = TableStyleProps { normal: chain.iter().any(|s| s.default || s.id == "TableNormal"), ..Default::default() };
         for s in chain {
             out.para.overlay(&s.para);
             out.chr.overlay(&s.chr);

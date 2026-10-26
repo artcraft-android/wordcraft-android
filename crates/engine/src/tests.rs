@@ -7679,7 +7679,7 @@ fn shape_styles_paint_a_shape_in_the_theme_colours() {
     let bytes = crate::io::save_bytes("g.docx", &s.doc).unwrap();
     assert_eq!(gradient(&crate::io::open_bytes("g.docx", &bytes).unwrap()), Some(g));
     let l = s.layout();
-    let draws = wordcraft_layout::display::page_display(&s.doc, &l.pages[0], &Default::default());
+    let draws = opened(wordcraft_layout::display::page_display(&s.doc, &l.pages[0], &Default::default()));
     assert!(draws.iter().any(|d| matches!(d, wordcraft_layout::display::Draw::Art { .. })), "the gradient drawn over the shape");
     run(&mut s, "shape.fill", json!({"color": "FF0000"}));
     assert_eq!(gradient(&s.doc), None, "a plain colour replaces it");
@@ -7700,7 +7700,7 @@ fn shape_styles_paint_a_shape_in_the_theme_colours() {
     assert_eq!(t(&s.doc), None);
     run(&mut s, "shape.fill", json!({"transparency": 30}));
     let l = s.layout();
-    let draws = wordcraft_layout::display::page_display(&s.doc, &l.pages[0], &Default::default());
+    let draws = opened(wordcraft_layout::display::page_display(&s.doc, &l.pages[0], &Default::default()));
     assert!(draws.iter().any(|d| matches!(d, wordcraft_layout::display::Draw::Faded { alpha, .. } if (*alpha - 0.7).abs() < 0.01)));
     assert!(s.run("shape.style", &json!({"style": "sparkly", "color": "accent1"})).is_err());
 }
@@ -7730,7 +7730,7 @@ fn preset_shapes_are_drawn_saved_and_changed_as_themselves() {
     assert!((w / h - wordcraft_doc::preset::aspect("hexagon")).abs() < 0.01, "first at its usual shape: {w} × {h}");
     // drawn as its outline: a path, not a box
     let l = s.layout();
-    let draws = page_display(&s.doc, &l.pages[0], &DisplayOptions::default());
+    let draws = opened(page_display(&s.doc, &l.pages[0], &DisplayOptions::default()));
     assert!(draws.iter().any(|d| matches!(d, Draw::Path { fill: Some(_), .. })), "{draws:?}");
     assert!(!draws.iter().any(|d| matches!(d, Draw::Shape { .. })));
 
@@ -8178,6 +8178,44 @@ fn preset_shapes_keep_their_shadows() {
     run(&mut s, "insert.shape", json!({"preset": "hexagon"}));
     run(&mut s, "shape.effects", json!({"shadow": "offsetBottom"}));
     let l = s.layout();
-    let draws = page_display(&s.doc, &l.pages[0], &DisplayOptions::default());
+    let draws = opened(page_display(&s.doc, &l.pages[0], &DisplayOptions::default()));
     assert!(draws.iter().any(|d| matches!(d, Draw::Effects { filled: true, .. })), "{draws:?}");
+}
+
+/// A dark page leaves shapes and filled text boxes in their colours, as the reference draws them,
+/// and a box's automatic text is read against its fill: white on a dark one, black on white.
+#[test]
+fn filled_text_boxes_keep_their_colours_and_read_their_text_against_the_fill() {
+    use wordcraft_doc::Rgb;
+    use wordcraft_layout::display::{DisplayOptions, Draw, page_display};
+    let mut s = s();
+    run(&mut s, "insert.textBox", json!({"text": "Dark fill", "width": 160, "height": 40}));
+    run(&mut s, "caret.set", json!({"pos": {"story": "body", "path": [0], "off": 0}}));
+    run(&mut s, "select.objects", json!({"index": 0}));
+    let navy = Rgb(0x20, 0x38, 0x64);
+    run(&mut s, "shape.fill", json!({"color": "203864"}));
+    let l = s.layout();
+    let draws = page_display(&s.doc, &l.pages[0], &DisplayOptions::default());
+    let kept: Vec<Draw> =
+        draws.iter().filter_map(|d| if let Draw::Kept { items } = d { Some(opened(items.clone())) } else { None }).flatten().collect();
+    assert!(kept.iter().any(|d| matches!(d, Draw::Shape { fill: Some(f), .. } if *f == navy)), "the box kept: {draws:?}");
+    let text = kept.iter().find_map(|d| match d {
+        Draw::Glyphs { text, color, .. } if text.contains("Dark") => Some(*color),
+        _ => None,
+    });
+    assert_eq!(text, Some(Rgb::WHITE), "its text kept, white on the dark fill");
+    run(&mut s, "shape.fill", json!({"color": "FFFFFF"}));
+    let l = s.layout();
+    let text = opened(page_display(&s.doc, &l.pages[0], &DisplayOptions::default())).into_iter().find_map(|d| match d {
+        Draw::Glyphs { text, color, .. } if text.contains("Dark") => Some(color),
+        _ => None,
+    });
+    assert_eq!(text, Some(Rgb::BLACK), "black on a white fill");
+}
+
+/// The draws with the groups a dark page leaves in their colours (shapes, filled text boxes,
+/// pictures' shadows) opened up.
+fn opened(draws: Vec<wordcraft_layout::display::Draw>) -> Vec<wordcraft_layout::display::Draw> {
+    use wordcraft_layout::display::Draw;
+    draws.into_iter().flat_map(|x| if let Draw::Kept { items } = x { opened(items) } else { vec![x] }).collect()
 }

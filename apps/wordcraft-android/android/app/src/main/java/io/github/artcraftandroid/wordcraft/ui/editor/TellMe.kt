@@ -118,7 +118,7 @@ internal val TELL_ME_ITEMS: List<TellMeItem> = listOf(
     page("Size", "Layout", "paperSize", LucideIcons.File.glyph(), "paper page letter a4"),
     page("Columns", "Layout", "columns", LucideIcons.Columns2.glyph(), "newspaper"),
     page("Breaks", "Layout", "breaks", LucideIcons.SeparatorHorizontal.glyph(), "page break section"),
-    cmd("Spelling", "Review", "review.spelling", LucideIcons.SpellCheck.glyph(), "spell check proofing grammar"),
+    away("Check Document", "Review", LucideIcons.SpellCheck.glyph(), "spelling spell check proofing grammar") { it.openCheck() },
     page("Proofing and Language", "Review", "proofing", null, "spelling language"),
     away("Read Aloud", "Review", LucideIcons.AudioLines.glyph(), "speak listen voice") { it.startReadAloud() },
     page("Word Count", "Review", "wordCount", LucideIcons.FileDigit.glyph(), "characters pages statistics"),

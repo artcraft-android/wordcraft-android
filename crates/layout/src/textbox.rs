@@ -120,7 +120,8 @@ pub(crate) fn box_items(ctx: &mut Ctx, id: u32, rect: Rect, depth: usize) -> Vec
 /// Move items laid out in a box's frame onto the page: aligned in the `across` room (top,
 /// middle, bottom; for turned text, from the side its lines start on) and turned.
 fn place(mut items: Vec<Placed>, body: &TextBody, rect: Rect, across: f32) -> Vec<Placed> {
-    let used = extent(&items);
+    // the spacing after the last paragraph counts, as the reference centres a box's text
+    let used = extent(&items) + last_space_after(&items);
     let off = match body.anchor {
         VAlign::Top => 0.0,
         VAlign::Center => ((across - used) / 2.0).max(0.0),
@@ -141,6 +142,20 @@ fn place(mut items: Vec<Placed>, body: &TextBody, rect: Rect, across: f32) -> Ve
 }
 
 /// How deep laid-out items reach below their frame's top.
+/// The spacing after the last paragraph among `items`, when its last line is there.
+fn last_space_after(items: &[Placed]) -> f32 {
+    items
+        .iter()
+        .rev()
+        .find_map(|it| match it {
+            Placed::Lines { para, l1, path, .. } if path.0.len() == 1 => {
+                Some(if *l1 == para.lines.len() { para.rp.space_after.max(0.0) } else { 0.0 })
+            }
+            _ => None,
+        })
+        .unwrap_or(0.0)
+}
+
 fn extent(items: &[Placed]) -> f32 {
     let mut bottom = 0.0f32;
     for it in items {

@@ -133,18 +133,21 @@ fn metric_twins(family: &str) -> &'static [&'static str] {
 
 /// The line metrics (ascent and descent, in ems) of a proprietary font that has no open twin, as
 /// the reference lays out its lines (measured from its highlight boxes): a font standing in for it
-/// keeps its line spacing.
-fn stand_in_line_metrics(family: &str) -> Option<(f64, f64)> {
+/// keeps its line spacing. The phone app's Mobile View (`mobile`) sets lines a little apart from
+/// its pages.
+fn stand_in_line_metrics(family: &str, mobile: bool) -> Option<(f64, f64)> {
     match family.trim().to_ascii_lowercase().as_str() {
-        "aptos" => Some((0.970, 0.340)),
+        "aptos" | "aptos display" if mobile => Some((0.970, 0.340)),
+        "aptos" | "aptos display" => Some((0.951, 0.274)),
         _ => None,
     }
 }
 
-/// [`line_metrics`] for text asked in `family` and drawn in `face` (as [`resolve`] chose it): a
-/// face standing in for a font with known line metrics takes that font's.
-pub fn line_metrics_for(family: &str, substituted: bool, face: &crate::FontFace) -> (f64, f64) {
-    match stand_in_line_metrics(charset_base_family(family)).filter(|_| substituted) {
+/// [`line_metrics`] for text asked in `family` and drawn in `face` (as [`resolve`] chose it), on
+/// the pages or in Mobile View (`mobile`): a face standing in for a font with known line metrics
+/// takes that font's.
+pub fn line_metrics_for(family: &str, substituted: bool, face: &crate::FontFace, mobile: bool) -> (f64, f64) {
+    match stand_in_line_metrics(charset_base_family(family), mobile).filter(|_| substituted) {
         Some((a, d)) => (a * face.upem, d * face.upem),
         None => line_metrics(face),
     }
@@ -335,11 +338,14 @@ mod tests {
     fn a_face_standing_in_for_aptos_takes_its_line_spacing() {
         let r = super::resolve("Source Serif 4", false, false);
         let face = r.face.get();
-        let (a, d) = super::line_metrics_for("Aptos", true, face);
-        assert!(((a + d) / face.upem - 1.31).abs() < 1e-9, "{a} {d}");
+        let (a, d) = super::line_metrics_for("Aptos", true, face, true);
+        assert!(((a + d) / face.upem - 1.31).abs() < 1e-9, "Mobile View: {a} {d}");
+        // the pages set its lines closer
+        let (a, d) = super::line_metrics_for("Aptos", true, face, false);
+        assert!(((a + d) / face.upem - 1.225).abs() < 1e-9, "pages: {a} {d}");
         // asked for itself, or a font with no known metrics: the face's own
-        assert_eq!(super::line_metrics_for("Aptos", false, face), super::line_metrics(face));
-        assert_eq!(super::line_metrics_for("Some Other Font", true, face), super::line_metrics(face));
+        assert_eq!(super::line_metrics_for("Aptos", false, face, true), super::line_metrics(face));
+        assert_eq!(super::line_metrics_for("Some Other Font", true, face, true), super::line_metrics(face));
     }
 
     use super::*;

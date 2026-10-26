@@ -353,6 +353,10 @@ fn drawings_are_found_and_footnotes_are_not_drawings() {
     assert!(!m.has_drawings());
     m.execute("caret.set".into(), r#"{"pos":{"block":0,"off":0}}"#.into()).unwrap();
     m.execute("insert.shape".into(), r#"{"kind":"ellipse"}"#.into()).unwrap();
+    // in front of the text it stays where it is in Mobile View; wrapped, it moves
+    m.execute("arrange.wrap".into(), r#"{"wrap":"inFrontOfText"}"#.into()).unwrap();
+    assert!(!m.has_drawings());
+    m.execute("arrange.wrap".into(), r#"{"wrap":"square"}"#.into()).unwrap();
     assert!(m.has_drawings());
 }
 
@@ -787,4 +791,58 @@ fn the_shape_gallery_draws_every_preset_and_shrugs_off_junk() {
     assert!(shape_outline("bracePair".into(), 40.0, 40.0).unwrap().line_like && !shape_outline("cube".into(), 40.0, 40.0).unwrap().line_like);
     assert!(shape_outline("noSuchShape".into(), 40.0, 40.0).is_none());
     assert!(shape_outline("hexagon".into(), f32::NAN, f32::INFINITY).is_some(), "junk sizes are clamped");
+}
+
+/// As the reference marks text: misspellings and a repeated word (under the second), no grammar.
+#[test]
+fn proofing_marks_spelling_and_repeated_words_but_no_grammar() {
+    let m = MobileSession::default();
+    let text = "this one has has  two spaces and a mispeled word.";
+    m.execute("text.insert".into(), json!({ "text": text }).to_string()).unwrap();
+    let marks: Vec<(String, bool)> = {
+        let mut s = m.lock();
+        let l = s.layout();
+        l.pages
+            .iter()
+            .flat_map(|p| &p.items)
+            .filter_map(|it| if let wordcraft_engine::layout::Placed::Lines { para, .. } = it { Some(para.issues.clone()) } else { None })
+            .flatten()
+            .map(|(a, b, grammar)| (text[a..b].to_string(), grammar))
+            .collect()
+    };
+    assert_eq!(marks, [("has".to_string(), false), ("mispeled".to_string(), false)]);
+    // the pane lists the same, and grammar comes back with its switch
+    let listed = |grammar: bool| -> usize {
+        let out = m.execute("review.issues".into(), json!({ "grammar": grammar }).to_string()).unwrap();
+        serde_json::from_str::<Value>(&out).unwrap().as_array().map_or(0, Vec::len)
+    };
+    assert_eq!(listed(false), 2);
+    assert!(listed(true) > 2);
+    // turning grammar marks on draws the pages again
+    let before = m.document_info().revision;
+    m.execute("file.options".into(), json!({ "markGrammar": true }).to_string()).unwrap();
+    assert_ne!(m.document_info().revision, before);
+}
+
+/// A comment's anchor line is reported for the mark beside it; a reply adds none.
+#[test]
+fn comment_marks_point_at_each_threads_line() {
+    let m = MobileSession::default();
+    m.execute("text.insert".into(), json!({ "text": "First line\nSecond line with a note" }).to_string()).unwrap();
+    assert!(m.comment_marks().is_empty());
+    m.execute("select.text".into(), json!({ "text": "a note" }).to_string()).unwrap();
+    m.execute("review.newComment".into(), json!({ "text": "Check this." }).to_string()).unwrap();
+    let marks = m.comment_marks();
+    assert_eq!(marks.len(), 1, "{marks:?}");
+    let first = &marks[0];
+    assert!(first.height > 0.0 && first.y > 0.0, "{first:?}");
+}
+
+/// A new document opens at 100%, the zoom it is saved at.
+#[test]
+fn a_document_opens_at_its_saved_zoom() {
+    let m = MobileSession::default();
+    assert_eq!(m.document_zoom(), 100);
+    // and scrolled past the first page's top margin
+    assert!((m.first_text_top() - 72.0).abs() < 0.5, "{}", m.first_text_top());
 }

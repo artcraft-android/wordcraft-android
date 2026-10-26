@@ -93,10 +93,27 @@ pub struct Issue {
     pub lang: ProofLang,
 }
 
+impl Issue {
+    /// The part of `text` (the text it was found in) to underline: all of the issue, but only the
+    /// second word of a repeated pair.
+    pub fn marked(&self, text: &str) -> (usize, usize) {
+        if self.kind == IssueKind::Repeated
+            && let Some((k, c)) = text.get(self.start..self.end).and_then(|t| t.char_indices().rev().find(|(_, c)| c.is_whitespace()))
+        {
+            return (self.start + k + c.len_utf8(), self.end);
+        }
+        (self.start, self.end)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IssueKind {
     Spelling,
     Grammar,
+    /// A word written twice in a row (`the the`). Word's spelling checker finds these: they are
+    /// checked with spelling, even with grammar off, and marked as misspellings are, under the
+    /// second word ([`Issue::marked`]); the suggestion keeps one.
+    Repeated,
 }
 
 fn user_words() -> &'static RwLock<HashSet<String>> {
@@ -666,7 +683,7 @@ pub fn check_text(text: &str, spans: &[(Range<usize>, ProofLang)]) -> Vec<Issue>
 }
 
 /// [`check_text`] with the File › Options › Proofing choices: what spelling skips, and whether
-/// grammar is checked at all.
+/// grammar is checked at all (repeated words are, with spelling).
 pub fn check_text_with(text: &str, spans: &[(Range<usize>, ProofLang)], opts: &Options, grammar: bool) -> Vec<Issue> {
     // Sorted, empty ones dropped, neighbours of one language merged.
     let mut sorted: Vec<&(Range<usize>, ProofLang)> = spans.iter().filter(|(r, _)| r.start < r.end).collect();
@@ -693,10 +710,6 @@ pub fn check_text_with(text: &str, spans: &[(Range<usize>, ProofLang)], opts: &O
         merged.get(k).filter(|(r, _)| r.start <= i).map_or(default, |s| s.1)
     };
     let mut v: Vec<Issue> = spelling_issues(text, lang_at, opts);
-    if !grammar {
-        v.sort_by_key(|i| (i.start, i.end));
-        return v;
-    }
     let mut langs: Vec<ProofLang> = merged.iter().map(|s| s.1).collect();
     let mut covered = 0;
     for (r, _) in &merged {
@@ -711,7 +724,7 @@ pub fn check_text_with(text: &str, spans: &[(Range<usize>, ProofLang)], opts: &O
     langs.sort();
     langs.dedup();
     for lang in langs {
-        v.extend(check_grammar_in(text, lang).into_iter().filter(|i| lang_at(i.start) == lang));
+        v.extend(check_grammar_in(text, lang).into_iter().filter(|i| lang_at(i.start) == lang && (grammar || i.kind == IssueKind::Repeated)));
     }
     v.sort_by_key(|i| (i.start, i.end));
     v
@@ -732,7 +745,7 @@ pub fn check_grammar(text: &str) -> Vec<Issue> {
             v.push(Issue {
                 start: *a0,
                 end: *b1,
-                kind: IssueKind::Grammar,
+                kind: IssueKind::Repeated,
                 message: format!("Repeated word: \"{w1}\""),
                 suggestions: vec![w0.to_string()],
                 lang: ProofLang::En,
@@ -1256,6 +1269,27 @@ mod tests {
         assert!(g.iter().any(|i| i.message.contains("ripetuta")), "{g:?}");
     }
 
+    /// Word's spelling checker finds a word written twice and marks the second; it is checked
+    /// with grammar off too, when no grammar marks are.
+    #[test]
+    fn repeated_words_go_with_spelling_and_mark_the_second_word() {
+        let t = "It was was a long day.";
+        let v = check_text_with(t, &[], &Options::default(), false);
+        let rep = v.iter().find(|i| i.kind == IssueKind::Repeated).unwrap();
+        assert_eq!((&t[rep.start..rep.end], rep.suggestions.as_slice()), ("was was", ["was".to_string()].as_slice()));
+        let (a, b) = rep.marked(t);
+        assert_eq!((a, &t[a..b]), (t.rfind("was").unwrap(), "was"));
+        // the second word alone (Turkish marks it so) is marked whole
+        let t = "bu bu ev";
+        let tr = check_text_with(t, &[(0..t.len(), ProofLang::Tr)], &Options::default(), false);
+        let rep = tr.iter().find(|i| i.kind == IssueKind::Repeated).unwrap();
+        assert_eq!((rep.marked(t), &t[rep.start..rep.end]), ((rep.start, rep.end), "bu"));
+        // other grammar rules only with grammar
+        let t = "this one has  two spaces.";
+        assert!(check_text_with(t, &[], &Options::default(), false).iter().all(|i| i.kind == IssueKind::Spelling), "{t}");
+        assert!(check_text_with(t, &[], &Options::default(), true).iter().any(|i| i.kind == IssueKind::Grammar), "{t}");
+    }
+
     #[test]
     fn mixed_language_paragraphs_check_each_run_in_its_language() {
         pl::test_dict::install();
@@ -1265,7 +1299,7 @@ mod tests {
         let spans = [(0..a, ProofLang::Pl), (a..b, ProofLang::En), (b..t.len(), ProofLang::Pl)];
         let v = check_text(t, &spans);
         assert_eq!(flagged(t, &v), ["żeka"], "{v:?}");
-        let rep = v.iter().find(|i| i.kind == IssueKind::Grammar).unwrap();
+        let rep = v.iter().find(|i| i.kind == IssueKind::Repeated).unwrap();
         assert_eq!((rep.lang, rep.message.as_str()), (ProofLang::En, "Repeated word: \"is\""), "{v:?}");
         // The English rules don't run over the Polish text (no "Capitalize" for the lower-case
         // Polish words), and the Polish rules don't run over the English quote.

@@ -157,6 +157,8 @@ impl MarkupView {
 pub struct ViewState {
     pub zoom: f32,
     pub mode: ViewMode,
+    /// Web Layout as the phone app's Mobile View ([`wordcraft_layout::LayoutOptions::mobile`]).
+    pub mobile: bool,
     pub read_mode: bool,
     pub focus_mode: bool,
     pub marks: bool,
@@ -263,6 +265,7 @@ impl Default for ViewState {
         ViewState {
             zoom: 1.0,
             mode: ViewMode::Print,
+            mobile: false,
             read_mode: false,
             focus_mode: false,
             marks: false,
@@ -457,6 +460,7 @@ pub struct Session {
         Option<wordcraft_layout::outline::OutlineView>,
         (bool, bool, bool),
         NumeralMode,
+        bool,
     )>,
     /// Picture edits: edited media key → original media key (Reset Picture).
     pub originals: std::collections::HashMap<String, String>,
@@ -829,7 +833,7 @@ impl Session {
         let hide_deleted = !original && (!self.view.show_markup || self.prefs.markup.hides_deletions());
         let deleted = (hide_deleted, self.revisions_in_balloons(), original);
         let outline = (mode == ViewMode::Outline).then(|| self.view.outline.view());
-        if let Some((r, w, h, m, sp, l, pf, o, hd, n)) = &self.layout
+        if let Some((r, w, h, m, sp, l, pf, o, hd, n, mo)) = &self.layout
             && *r == self.rev
             && (*w == width || mode == ViewMode::Print)
             && *h == height
@@ -839,12 +843,14 @@ impl Session {
             && *n == self.view.numeral
             && *hd == deleted
             && *o == outline
+            && *mo == self.view.mobile
         {
             return l.clone();
         }
         let opts = LayoutOptions {
             view: mode,
             web_width: width,
+            mobile: self.view.mobile,
             read_height: height,
             read_line_spacing: spacing.map(f32::from_bits),
             show_hidden: self.view.marks || self.prefs.marks.hidden,
@@ -859,7 +865,8 @@ impl Session {
             proof: wordcraft_layout::ProofOptions { grammar: self.prefs.mark_grammar, spelling: self.prefs.spelling() },
         };
         let l = Arc::new(wordcraft_layout::layout(&self.doc, &mut self.cache, &opts));
-        self.layout = Some((self.rev, width, height, mode, spacing, l.clone(), self.view.proofing, outline, deleted, self.view.numeral));
+        self.layout =
+            Some((self.rev, width, height, mode, spacing, l.clone(), self.view.proofing, outline, deleted, self.view.numeral, self.view.mobile));
         l
     }
     /// A layout for output (PDF, images, print): no proofing marks, print view.

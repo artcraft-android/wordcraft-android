@@ -700,6 +700,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         screen = if (document != null) Screen.Editor else Screen.Start
     }
 
+    /** The zoom the document was saved at, percent (0: fitting the page), which Print View opens at. */
+    var docZoom by mutableStateOf(100)
+        private set
+
+    /** How far down the first page its text starts, points: Print View opens scrolled past it. */
+    var textTop by mutableStateOf(0f)
+        private set
+
     /** The document has drawings Mobile View can't show well (its message bar says so), unless closed. */
     var hasDrawings by mutableStateOf(false)
         private set
@@ -744,6 +752,76 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun goToComment(c: CommentItem) {
         val anchor = c.anchor ?: return
         command("caret.set", JSONObject().put("pos", anchor).toString())
+    }
+
+    /** Check Document: the proofing issues in the palette's place, and its Settings page. */
+    var checkOpen by mutableStateOf(false)
+    var checkSettings by mutableStateOf(false)
+
+    /** An issue as the pane lists it: where it is, its text, and what it could change to. */
+    data class ProofIssue(val start: JSONObject?, val end: JSONObject?, val text: String, val spelling: Boolean, val message: String, val suggestions: List<String>)
+
+    var issues by mutableStateOf<List<ProofIssue>>(emptyList())
+        private set
+
+    /** Spelling and grammar marks, as the pane's switches set them (the reference marks no grammar). */
+    var checkSpelling by mutableStateOf(true)
+        private set
+    var markGrammar by mutableStateOf(false)
+        private set
+
+    fun openCheck() {
+        closePalette()
+        checkSettings = false
+        checkOpen = true
+    }
+
+    /** The document's issues, those the marks show. */
+    fun loadIssues() = withEngine { e ->
+        val out = e.command { runCatching { execute("review.issues", JSONObject().put("grammar", markGrammar).toString()) }.getOrNull() }
+        issues = runCatching {
+            val arr = JSONArray(out ?: "[]")
+            (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                val s = o.optJSONArray("suggestions")
+                ProofIssue(
+                    start = o.optJSONObject("start"),
+                    end = o.optJSONObject("end"),
+                    text = o.optString("text"),
+                    spelling = o.optString("kind") == "spelling",
+                    message = o.optString("message"),
+                    suggestions = if (s == null) emptyList() else (0 until s.length()).map { s.optString(it) },
+                )
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    /** Turn spelling or grammar marks on or off. */
+    fun setProofing(spelling: Boolean = checkSpelling, grammar: Boolean = markGrammar) {
+        checkSpelling = spelling
+        markGrammar = grammar
+        command("file.options", JSONObject().put("checkSpelling", spelling).put("markGrammar", grammar).toString())
+    }
+
+    private fun selectIssue(i: ProofIssue) = "select.range" to JSONObject().put("anchor", i.start).put("focus", i.end).toString()
+
+    /** Go to the issue, its text selected. */
+    fun goToIssue(i: ProofIssue) {
+        val (id, params) = selectIssue(i)
+        command(id, params)
+    }
+
+    /** Change the issue's text to [text] (or ignore the word everywhere: null), then list the issues again. */
+    fun fixIssue(i: ProofIssue, text: String?) = withEngine { e ->
+        val (id, params) = selectIssue(i)
+        e.command {
+            runCatching {
+                execute(id, params)
+                if (text != null) execute("review.applySuggestion", JSONObject().put("text", text).toString()) else execute("review.ignoreAll", "")
+            }
+        }
+        refresh(e)
+        loadIssues()
     }
 
     /** The spelling or grammar suggestions for the word at the caret, offered in the context bar. */
@@ -892,6 +970,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Re-read the pages, the selection, the formatting and the engine's requests after a change. */
+    /** Whether a tap at (`x`, `y`) on `page` is on a comment's mark (its middle 5.2 pt in from the page's right edge, 12 pt across). */
+    private fun onCommentMark(page: Int, x: Float, y: Float): Boolean {
+        val w = info?.pages?.getOrNull(page)?.width ?: return false
+        return commentMarks.any { m -> m.page.toInt() == page && kotlin.math.abs(x - (w - 5.2f)) <= 10f && kotlin.math.abs(y - (m.y + m.height * 0.32f)) <= 10f }
+    }
+
+    /** Where each comment thread is anchored (its first line), for the marks beside the text. */
+    var commentMarks by mutableStateOf<List<io.github.artcraftandroid.wordcraft.core.PageRect>>(emptyList())
+        private set
+
     private suspend fun refresh(e: Engine) {
         val r = e.command { Triple(documentInfo(), selectionView(), formatState()) }
         info = r.first
@@ -901,6 +989,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val extra = e.command { pageSetup() to reviewState() }
         pageSetup = extra.first
         review = extra.second
+        commentMarks = e.command { commentMarks() }
         val events = e.command { takeEvents() }
         events.status?.let { if (it.isNotBlank()) message = it }
         scheduleAutoSave()
@@ -961,12 +1050,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (viewMode == ViewMode.Mobile && mobileWidth > 0f) e.command { setView("mobile", mobileWidth) } else e.command { setView("print", 0f) }
         colors = e.command { colorChoices() }
         themeFonts = e.command { themeFonts() }
+        // the drawings message shows for each document with drawings Mobile View moves, until
+        // closed, as the reference app's does
         hasDrawings = e.command { hasDrawings() }
-        // the drawings message shows once, on the first document with drawings, and not again
-        // for any document, as the reference app does
-        val shown = prefs.getBoolean("drawingsMessageShown", false)
-        messageBarClosed = shown
-        if (!shown && hasDrawings) prefs.edit().putBoolean("drawingsMessageShown", true).remove("messageShown").apply()
+        messageBarClosed = false
+        docZoom = e.command { documentZoom() }.toInt()
+        textTop = e.command { firstTextTop() }
         val key = doc.uri?.toString()
         // reopened where it was left past its first page: offered to go back there
         resumeOffer = key?.let { readingPlaces().optJSONObject(it) }?.takeIf { it.optInt("p") >= 1 }?.let { it.optDouble("f").toFloat() to it.optInt("p") }
@@ -1385,6 +1474,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** A tap on the page: the caret goes there; while editing, the keyboard comes up. */
     fun tap(page: Int, x: Float, y: Float) = withEngine { e ->
+        // a comment's mark beside its line opens the comments, as the reference's does
+        if (viewMode == ViewMode.Mobile && onCommentMark(page, x, y)) {
+            commentsOpen = true
+            return@withEngine
+        }
         commitComposing(e)
         contextBar = false
         e.command { tap(page.toUInt(), x, y, false) }

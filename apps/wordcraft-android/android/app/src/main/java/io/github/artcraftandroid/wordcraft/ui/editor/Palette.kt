@@ -42,6 +42,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
@@ -249,12 +252,23 @@ internal fun PaletteRow(
     }
 }
 
-/** A row of equal cells (the toggles, the indents, the alignments). */
+/**
+ * A row of equal cells (the toggles, the indents, the alignments), each named by [labels] for
+ * screen readers (as the reference names its: Bold, Increase Indent…), on or off as it shows.
+ */
 @Composable
-internal fun CellRow(vararg cells: Triple<Glyph, Boolean, () -> Unit>) {
+internal fun CellRow(vararg cells: Triple<Glyph, Boolean, () -> Unit>, labels: List<String> = emptyList()) {
     Row(Modifier.fillMaxWidth().height(ROW + 1.dp).bottomEdge(WordColors.Divider)) {
-        for ((glyph, on, click) in cells) {
-            Box(Modifier.weight(1f).height(ROW).background(if (on) WordColors.Pressed else WordColors.Surface).clickable(onClick = click), contentAlignment = Alignment.Center) {
+        for ((i, cell) in cells.withIndex()) {
+            val (glyph, on, click) = cell
+            val label = labels.getOrNull(i)
+            Box(
+                Modifier.weight(1f).height(ROW).background(if (on) WordColors.Pressed else WordColors.Surface).clickable(onClick = click).semantics {
+                    if (label != null) contentDescription = label
+                    selected = on
+                },
+                contentAlignment = Alignment.Center,
+            ) {
                 GlyphIcon(glyph, WordColors.OnStrip, size = 26.dp)
             }
         }
@@ -285,6 +299,7 @@ private fun HomeTab(vm: AppViewModel, onFind: () -> Unit) {
             Triple(Letters.Italic, f?.italic == true) { vm.command("format.italic") },
             Triple(Letters.Underline, f?.underline == true) { vm.command("format.underline") },
             Triple(Letters.Strike, f?.strikethrough == true) { vm.command("format.strikethrough") },
+            labels = listOf("Bold", "Italic", "Underline", "Strikethrough"),
         )
         PaletteRow(
             "Highlight",
@@ -308,12 +323,14 @@ private fun HomeTab(vm: AppViewModel, onFind: () -> Unit) {
             Triple(LucideIcons.ListIndentIncrease.glyph(), false) { vm.command("para.indent") },
             Triple(Glyph.Letters("›¶"), f?.rtl == false) { vm.command("para.ltr") },
             Triple(Glyph.Letters("¶‹"), f?.rtl == true) { vm.command("para.rtl") },
+            labels = listOf("Decrease Indent", "Increase Indent", "Left-to-Right", "Right-to-Left"),
         )
         CellRow(
             Triple(LucideIcons.AlignLeft.glyph(), f?.align == "left") { vm.command("para.alignLeft") },
             Triple(LucideIcons.AlignCenter.glyph(), f?.align == "center") { vm.command("para.alignCenter") },
             Triple(LucideIcons.AlignRight.glyph(), f?.align == "right") { vm.command("para.alignRight") },
             Triple(LucideIcons.AlignJustify.glyph(), f?.align == "justify" || f?.align == "distribute") { vm.command("para.justify") },
+            labels = listOf("Align Left", "Center", "Align Right", "Justify"),
         )
         PaletteRow("Paragraph Formatting", null, onClick = { vm.pushPanel("paragraph") }, chevron = true)
         Band()

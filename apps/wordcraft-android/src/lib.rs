@@ -82,7 +82,8 @@ pub struct PageSize {
 pub struct DocumentInfo {
     /// Changes when another document is opened or created.
     pub document_id: u64,
-    /// Changes with every edit, undo and redo: draw the pages again when it does.
+    /// Changes with every edit, undo and redo, and with the proofing choices (they change the
+    /// marks without an edit): draw the pages again when it does.
     pub revision: u64,
     pub pages: Vec<PageSize>,
     pub dirty: bool,
@@ -506,6 +507,8 @@ impl Default for MobileSession {
         let mut s = Session::new(wordcraft_engine::blank_document(&Region::default()));
         // the app speaks each sentence with the phone's own speech and asks for the next
         s.read_aloud.backend = speech::Backend::Hold;
+        // the phone app marks spelling (repeated words among it) but no grammar
+        s.prefs.mark_grammar = false;
         Self { session: Mutex::new(s), reading: Mutex::new(Vec::new()) }
     }
 }
@@ -932,6 +935,7 @@ impl MobileSession {
     /// (`mobile`, the engine's Web Layout), and return the new pages.
     pub fn set_view(&self, mode: String, width: f32) -> Result<DocumentInfo, MobileError> {
         let mut s = self.lock();
+        s.view.mobile = mode == "mobile";
         if mode == "mobile" {
             s.view.web_width = if width.is_finite() { width.clamp(72.0, 4000.0) } else { 360.0 };
             Self::run(&mut s, "view.webLayout", json!({}))?;
@@ -943,16 +947,38 @@ impl MobileSession {
         Ok(info(&mut s))
     }
 
-    /// Whether the body holds pictures, shapes, charts or groups: Mobile View then says it can't
-    /// show them as the pages do.
+    /// Whether the body holds drawings Mobile View moves from where the pages have them (ones
+    /// the text wraps round, beside or above and below) or ink: Mobile View then says it can't
+    /// show them as the pages do, as the reference says it for such documents (not for pictures
+    /// in line with the text, or in front of it or behind it).
     pub fn has_drawings(&self) -> bool {
-        use wordcraft_engine::doc::para::OBJ;
+        use wordcraft_engine::doc::para::{OBJ, Wrap};
+        let moved = |o: &wordcraft_engine::doc::InlineObject| {
+            o.ink().is_some() || o.frame().is_some_and(|(_, _, f)| matches!(f.wrap, Wrap::Square | Wrap::Tight | Wrap::Through | Wrap::TopAndBottom))
+        };
         let s = self.lock();
         s.doc.para_paths(wordcraft_engine::doc::StoryRef::Body).iter().any(|path| {
             s.doc
                 .para_at(&Pos::new(wordcraft_engine::doc::StoryRef::Body, path.clone(), 0))
-                .is_some_and(|p| p.text.char_indices().any(|(i, c)| c == OBJ && p.object_at(i).is_some_and(|o| o.is_drawing())))
+                .is_some_and(|p| p.text.char_indices().any(|(i, c)| c == OBJ && p.object_at(i).is_some_and(|o| o.is_drawing() && moved(o))))
         })
+    }
+
+    /// The zoom the document was saved at (View › Zoom), percent, which the pages first show at
+    /// (as the reference opens them); 0 when it was saved fitting the page to the window.
+    pub fn document_zoom(&self) -> u32 {
+        match self.lock().doc.settings.zoom {
+            Some(z) if z.fit.is_some() => 0,
+            Some(z) => z.percent.clamp(10, 500),
+            None => 100,
+        }
+    }
+
+    /// How far down the first page its text starts (its top margin), points: the pages open
+    /// scrolled past it, as the reference opens them.
+    pub fn first_text_top(&self) -> f32 {
+        let s = self.lock();
+        s.doc.sections().first().map_or(0.0, |(_, sp)| if sp.margin_top.is_finite() { sp.margin_top.abs() } else { 0.0 })
     }
 
     /// Draw the pages dark (lightness inverted, pictures as they are) to sit in a dark theme.
@@ -1372,6 +1398,27 @@ impl MobileSession {
         texts
     }
 
+    /// Where each comment thread is anchored in the body: the line its anchor starts on (page,
+    /// x, top, height), for the marks Mobile View shows beside commented lines. Replies, and
+    /// comments whose anchor is gone, have none.
+    pub fn comment_marks(&self) -> Vec<PageRect> {
+        let mut s = self.lock();
+        let anchors: Vec<Pos> = wordcraft_engine::cmd::review::comment_list(&s)
+            .into_iter()
+            .filter(|(id, _)| s.doc.comments.get(id).is_some_and(|c| c.parent.is_none()))
+            .filter_map(|(_, pos)| pos)
+            .collect();
+        if anchors.is_empty() {
+            return Vec::new();
+        }
+        let layout = s.layout();
+        anchors
+            .iter()
+            .filter_map(|p| layout.caret(p))
+            .map(|c| PageRect { page: page_index(c.page), x: c.x, y: c.top, width: 0.0, height: c.height })
+            .collect()
+    }
+
     /// The rectangles of sentence `index` of the last Read Aloud list, to highlight it while it
     /// is spoken.
     pub fn read_aloud_rects(&self, index: u32) -> Vec<PageRect> {
@@ -1433,12 +1480,21 @@ impl MobileSession {
     }
 }
 
+/// The document's revision, with the proofing choices that change what is drawn without an edit
+/// (spelling marks, grammar marks).
+fn drawn_revision(s: &Session) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (s.rev(), s.view.proofing, s.prefs.mark_grammar).hash(&mut h);
+    h.finish()
+}
+
 /// The document's state for [`DocumentInfo`].
 fn info(s: &mut Session) -> DocumentInfo {
     let layout = s.layout();
     DocumentInfo {
         document_id: s.document_id(),
-        revision: s.rev(),
+        revision: drawn_revision(s),
         pages: layout.pages.iter().map(|p| PageSize { width: p.w, height: p.h, markup: p.markup }).collect(),
         dirty: s.dirty,
         can_undo: s.can_undo(),

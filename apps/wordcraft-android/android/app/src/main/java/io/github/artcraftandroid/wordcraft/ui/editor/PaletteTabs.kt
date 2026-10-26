@@ -271,6 +271,7 @@ private fun NumberFormatPanel(vm: AppViewModel) {
 
 /** The four pens in a row: WordCraft's own black, red, blue and green. */
 private val PEN_PRESETS = listOf("000000", "E03131", "1C7ED6", "37B24D")
+private val PEN_NAMES = listOf("Black", "Red", "Blue", "Green")
 
 @Composable
 private fun DrawTab(vm: AppViewModel) {
@@ -284,7 +285,7 @@ private fun DrawTab(vm: AppViewModel) {
         PaletteRow("Highlighter", LucideIcons.Highlighter.glyph(), onClick = { vm.pickTool("highlighter") }, pressed = vm.inkOn && vm.inkTool == "highlighter", enabled = on)
         if (!on) {
             Band()
-            CellRow(*PEN_PRESETS.map { Triple(Glyph.Dot(WordColors.Disabled) as Glyph, false) {} }.toTypedArray())
+            CellRow(*PEN_PRESETS.map { Triple(Glyph.Dot(WordColors.Disabled) as Glyph, false) {} }.toTypedArray(), labels = PEN_NAMES)
             PaletteRow("Color", LucideIcons.Palette.glyph(), onClick = {}, chevron = true, enabled = false)
             Band()
             PaletteRow("Thickness", LucideIcons.Minus.glyph(), onClick = {}, chevron = true, enabled = false)
@@ -300,6 +301,7 @@ private fun DrawTab(vm: AppViewModel) {
                     vm.setInkColor(hex)
                 }
             }.toTypedArray(),
+            labels = PEN_NAMES,
         )
         PaletteRow("Color", LucideIcons.Palette.glyph(), onClick = { vm.pushPanel("inkColor") }, chevron = true)
         Band()
@@ -486,7 +488,7 @@ private fun BreaksPanel(vm: AppViewModel) {
 private fun ReviewTab(vm: AppViewModel) {
     val r = vm.review
     Scrolling {
-        PaletteRow("Spelling", LucideIcons.SpellCheck.glyph(), onClick = { vm.command("review.spelling") })
+        PaletteRow("Check Document", LucideIcons.SpellCheck.glyph(), onClick = { vm.openCheck() })
         PaletteRow("Proofing and Language", null, onClick = { vm.pushPanel("proofing") }, chevron = true)
         Band()
         PaletteRow("Read Aloud", LucideIcons.AudioLines.glyph(), onClick = {
@@ -504,6 +506,7 @@ private fun ReviewTab(vm: AppViewModel) {
         CellRow(
             Triple(Glyph.Letters("‹"), false) { vm.command("review.previousComment") },
             Triple(Glyph.Letters("›"), false) { vm.command("review.nextComment") },
+            labels = listOf("Previous Comment", "Next Comment"),
         )
         Band()
         PaletteRow("Track Changes", LucideIcons.FilePenLine.glyph(), onClick = { vm.command("review.trackChanges") }, pressed = r?.trackChanges == true)
@@ -514,6 +517,7 @@ private fun ReviewTab(vm: AppViewModel) {
         CellRow(
             Triple(Glyph.Letters("‹"), false) { vm.command("review.previousChange") },
             Triple(Glyph.Letters("›"), false) { vm.command("review.nextChange") },
+            labels = listOf("Previous Change", "Next Change"),
         )
     }
 }

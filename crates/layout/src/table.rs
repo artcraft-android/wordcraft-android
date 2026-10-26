@@ -100,7 +100,13 @@ fn table_style(ctx: &Ctx, t: &Table) -> Option<TableStyleProps> {
 
 /// The table's default cell margins: its own, else its style's, else Word's.
 fn default_margins(t: &Table, style: Option<&TableStyleProps>) -> [f32; 4] {
-    t.props.cell_margins.or(style.and_then(|s| s.parts.cell_margins)).unwrap_or(DEFAULT_MARGINS)
+    // Word's default margins come with Normal Table: a table whose style isn't based on it, and
+    // sets none, has none (measured against the reference with such a Table Grid)
+    let fallback = match style {
+        Some(s) if !s.normal => [0.0; 4],
+        _ => DEFAULT_MARGINS,
+    };
+    t.props.cell_margins.or(style.and_then(|s| s.parts.cell_margins)).unwrap_or(fallback)
 }
 
 /// The margins (top, left, bottom, right; points) of cell `cell` of row `row`: its own, else the
@@ -202,6 +208,7 @@ pub fn measure_table_columns(doc: &wordcraft_doc::Document, t: &Table) -> Vec<(f
                 read_line_spacing: None,
                 grid: crate::para::Grid::default(),
                 fit_objects: false,
+                mobile: None,
             };
             let (mut min, mut max) = (EMPTY_TEXT, EMPTY_TEXT);
             if cell.props.vmerge != VMerge::Continue && !cell.props.text_direction.is_turned() {
@@ -374,7 +381,9 @@ pub fn layout_table(ctx: &mut Ctx, story: StoryRef, t: &Table, path: &[u32], ava
         grid.iter_mut().for_each(|w| *w *= k);
         total = tw;
     }
-    if total > avail * 1.5 && !t.props.fixed {
+    // Mobile View narrows a table wider than the screen to fit it (measured against the
+    // reference); elsewhere only a table far wider than its room is
+    if (total > avail * 1.5 && !t.props.fixed) || (ctx.mobile() && total > avail) {
         let k = avail / total.max(1.0);
         grid.iter_mut().for_each(|w| *w *= k);
         total = avail;

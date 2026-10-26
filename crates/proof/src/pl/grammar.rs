@@ -267,7 +267,7 @@ fn repeated_words(text: &str, ws: &[(usize, usize)], v: &mut Vec<Issue>) {
             && w0.to_lowercase() == w1.to_lowercase()
             && !ALLOWED_REPEATS.contains(&w0.to_lowercase().as_str())
         {
-            v.push(issue(*a0, *b1, format!("Powtórzone słowo: „{w1}”"), vec![w0.to_string()]));
+            v.push(Issue { kind: IssueKind::Repeated, ..issue(*a0, *b1, format!("Powtórzone słowo: „{w1}”"), vec![w0.to_string()]) });
         }
     }
 }
@@ -447,7 +447,7 @@ mod tests {
         assert_eq!(v.len(), 2, "{v:?}");
         assert_eq!(v[0].message, "Powtórzone słowo: „ma”");
         assert_eq!(v[0].suggestions, ["ma"]);
-        assert!(v.iter().all(|i| i.lang == ProofLang::Pl && i.kind == IssueKind::Grammar));
+        assert!(v.iter().all(|i| i.lang == ProofLang::Pl && matches!(i.kind, IssueKind::Grammar | IssueKind::Repeated)));
         clean("Tak tak, to to samo. Ha ha!");
     }
 

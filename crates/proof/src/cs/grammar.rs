@@ -20,7 +20,7 @@ fn repeated_words(text: &str, ws: &[(usize, usize)], v: &mut Vec<Issue>) {
         let [(a0, b0), (a1, b1)] = pair else { continue };
         let (Some(w0), Some(w1), Some(gap)) = (text.get(*a0..*b0), text.get(*a1..*b1), text.get(*b0..*a1)) else { continue };
         if !gap.is_empty() && gap.chars().all(char::is_whitespace) && w0.chars().all(char::is_alphabetic) && w0.to_lowercase() == w1.to_lowercase() {
-            v.push(issue(*a0, *b1, format!("Opakované slovo: „{w1}“"), vec![w0.to_string()]));
+            v.push(Issue { kind: IssueKind::Repeated, ..issue(*a0, *b1, format!("Opakované slovo: „{w1}“"), vec![w0.to_string()]) });
         }
     }
 }
@@ -75,7 +75,7 @@ mod tests {
         assert_eq!(issues[0].suggestions, ["Město"]);
         assert!(issues.iter().any(|i| i.message == "Mezera před interpunkcí" && &text[i.start..i.end] == " ,"));
         assert!(issues.iter().any(|i| i.message == "Dvojitá mezera"));
-        assert!(issues.iter().all(|i| i.lang == ProofLang::Cs && i.kind == IssueKind::Grammar));
+        assert!(issues.iter().all(|i| i.lang == ProofLang::Cs && matches!(i.kind, IssueKind::Grammar | IssueKind::Repeated)));
         for text in ["město. škola", "Dr. Novák", "A apple", "Město, město!", "Úsměv :) Číslo .5 a tečky ..."] {
             assert!(check(text).is_empty(), "{text}");
         }

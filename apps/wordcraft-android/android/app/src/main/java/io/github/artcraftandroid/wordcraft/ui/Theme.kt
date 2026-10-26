@@ -94,6 +94,10 @@ object WordColors {
     val FindField get() = pick(0xFFFFFFFF, 0xFF212121)
     val FindHint get() = pick(0xFF8A8A8A, 0xFFACACAC)
     val MatchCurrent get() = pick(0xFFC7BA64, 0xFF867836)
+
+    /** Mobile View's message card over the pages, and its text (the dark one measured on the reference). */
+    val MessageCard get() = pick(0xFFDCE5F7, 0xFF244185)
+    val OnMessageCard get() = pick(0xFF1F3B78, 0xFF8AAAEB)
     val MatchOther get() = pick(0xFFFFEE80, 0xFF4D4A2A)
 
     /** Find settings: an unticked box, its edge, and the line under Replace. */

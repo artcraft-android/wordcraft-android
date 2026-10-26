@@ -426,61 +426,108 @@ pub struct RenderOptions {
 pub const DARK_PAPER: u8 = 0x33;
 
 impl RenderOptions {
-    /// The on-screen colour for a document colour (see [`RenderOptions::dark`]).
+    /// The on-screen colour for a document colour (see [`RenderOptions::dark`]): on a dark page,
+    /// as [`dark_colour`] turns it.
     pub fn ink(&self, c: Rgb) -> Rgb {
         if !self.dark {
             return c;
         }
-        // Invert, then lift the blacks to the paper grey so the page isn't a black hole.
-        let Rgb(r, g, b) = invert_lightness(c);
-        let p = self.dark_paper as u32;
-        let lift = |v: u8| (p + v as u32 * (255 - p) / 255).min(255) as u8;
-        Rgb(lift(r), lift(g), lift(b))
+        dark_colour(c, self.dark_paper)
     }
 
-    /// The on-screen colour for a text background (highlight, character shading). A dark page
-    /// dims it toward black, keeping its hue, instead of inverting it: inverting leaves bright
-    /// hues such as yellow bright, so the white text on them can't be read (#1252). Every
-    /// colour lands dark enough for white text (WCAG contrast ≥ 4.5); yellow turns a dim olive.
+    /// The on-screen colour for a text background (highlight, character shading): turned as
+    /// every colour is, so the text on it keeps the contrast it has on a light page (the
+    /// reference turns highlights, shading and text alike; yellow becomes a dim olive).
     pub fn ink_bg(&self, c: Rgb) -> Rgb {
-        if !self.dark {
-            return c;
-        }
-        let f = |v: u8| (DARK_TEXT_BG_FLOOR as u32 + v as u32 * DARK_TEXT_BG_SPAN as u32 / 255).min(255) as u8;
-        Rgb(f(c.0), f(c.1), f(c.2))
+        self.ink(c)
     }
 
     /// The on-screen colour for text (or its underline) drawn on the text background `bg`, if
-    /// any. A dark page dims those backgrounds ([`RenderOptions::ink_bg`]), so the text takes the
-    /// lighter of its colour and its inverted colour (black, explicit or Automatic, turns white;
-    /// Automatic white on a dark highlight stays white), and white if that still falls short of
-    /// 4.5:1 against the dimmed background (pure blue or red on a dim olive). White always
-    /// reaches it: no dimmed background is lighter than #4A4A4A.
+    /// any. On a dark page text on a highlight or character shading stays light, as the
+    /// reference draws it: the lighter of its colour and its turned colour (black turns light,
+    /// Automatic white on a dark highlight stays white). Elsewhere it turns as every colour does.
     pub fn ink_text(&self, c: Rgb, bg: Option<Rgb>) -> Rgb {
         let inked = self.ink(c);
-        let Some(bg) = bg.filter(|_| self.dark) else { return inked };
-        let lighter = if c.luma() > inked.luma() { c } else { inked };
-        if contrast(lighter, self.ink_bg(bg)) >= 4.5 { lighter } else { Rgb::WHITE }
+        if bg.is_none() || !self.dark {
+            return inked;
+        }
+        if c.luma() > inked.luma() { c } else { inked }
     }
 }
 
-// The dim assumes the default dark paper grey (`DARK_PAPER`; the app never sets another
-// `dark_paper`): the backgrounds stay close to it and under #4A4A4A, so white text on them
-// reaches 4.5:1. Revisit both if the paper grey becomes configurable.
-/// Darkest channel of a text background on a dark page ([`RenderOptions::ink_bg`]).
-const DARK_TEXT_BG_FLOOR: u8 = 0x10;
-/// How far a full channel lifts a dark page's text background above the floor.
-const DARK_TEXT_BG_SPAN: u8 = 0x3A;
+/// On a dark page, black's lightness (OKLab) and how far white's falls from it: the curve
+/// `DARK_L_TOP - DARK_L_SPAN * L^DARK_L_POW` a colour's lightness `L` turns along, fitted to the
+/// reference's greys.
+const DARK_L_TOP: f32 = 0.973;
+const DARK_L_SPAN: f32 = 0.693;
+const DARK_L_POW: f32 = 1.68;
+/// How a colour's chroma follows its change in lightness (`(L / L')^DARK_CHROMA_FOLLOW`), and the
+/// share of it kept: the reference's colours come out a little greyer than they went in.
+const DARK_CHROMA_FOLLOW: f32 = 0.4;
+const DARK_CHROMA_KEPT: f32 = 0.8;
 
-/// WCAG 2 contrast ratio between two sRGB colours (1 to 21).
-fn contrast(a: Rgb, b: Rgb) -> f32 {
+/// A document colour as a dark page shows it, the way the reference turns colours (fitted to its
+/// greys, then checked on a set of hues: within a few levels for greys and pale colours, about
+/// twenty for strong ones): in OKLab the lightness turns along the curve above, the hue stays,
+/// the chroma follows the change in lightness, a little greyer, and comes in until the colour
+/// fits sRGB. White is the paper itself (`paper`, a grey), and nothing else goes darker than it.
+pub fn dark_colour(c: Rgb, paper: u8) -> Rgb {
+    if c == Rgb::WHITE {
+        return Rgb(paper, paper, paper);
+    }
+    let [l, a, b] = oklab(c);
+    let floor = oklab(Rgb(paper, paper, paper))[0];
+    let l2 = (DARK_L_TOP - DARK_L_SPAN * l.max(0.0).powf(DARK_L_POW)).max(floor).max(0.01);
+    let k = if l > 1e-4 { (l / l2).powf(DARK_CHROMA_FOLLOW) * DARK_CHROMA_KEPT } else { 1.0 };
+    let (a, b) = (a * k, b * k);
+    let fits = |s: f32| from_oklab(l2, a * s, b * s).iter().all(|v| (-1e-4..=1.0 + 1e-4).contains(v));
+    let mut s = 1.0f32;
+    if !fits(s) {
+        let (mut lo, mut hi) = (0.0f32, 1.0f32);
+        for _ in 0..18 {
+            let mid = (lo + hi) / 2.0;
+            if fits(mid) { lo = mid } else { hi = mid }
+        }
+        s = lo;
+    }
+    let [r, g, bl] = from_oklab(l2, a * s, b * s);
+    Rgb(to_srgb(r), to_srgb(g), to_srgb(bl))
+}
+
+/// An sRGB colour in OKLab (lightness, a, b).
+fn oklab(c: Rgb) -> [f32; 3] {
     let lin = |v: u8| {
         let s = v as f32 / 255.0;
         if s <= 0.04045 { s / 12.92 } else { ((s + 0.055) / 1.055).powf(2.4) }
     };
-    let lum = |c: Rgb| 0.2126 * lin(c.0) + 0.7152 * lin(c.1) + 0.0722 * lin(c.2);
-    let (la, lb) = (lum(a), lum(b));
-    (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
+    let (r, g, b) = (lin(c.0), lin(c.1), lin(c.2));
+    let l = (0.412_221_47 * r + 0.536_332_55 * g + 0.051_445_995 * b).cbrt();
+    let m = (0.211_903_5 * r + 0.680_699_5 * g + 0.107_396_96 * b).cbrt();
+    let s = (0.088_302_46 * r + 0.281_718_85 * g + 0.629_978_7 * b).cbrt();
+    [
+        0.210_454_26 * l + 0.793_617_8 * m - 0.004_072_047 * s,
+        1.977_998_5 * l - 2.428_592_2 * m + 0.450_593_7 * s,
+        0.025_904_037 * l + 0.782_771_77 * m - 0.808_675_77 * s,
+    ]
+}
+
+/// An OKLab colour as linear sRGB (possibly outside 0..1).
+fn from_oklab(l: f32, a: f32, b: f32) -> [f32; 3] {
+    let lc = (l + 0.396_337_78 * a + 0.215_803_76 * b).powi(3);
+    let mc = (l - 0.105_561_346 * a - 0.063_854_17 * b).powi(3);
+    let sc = (l - 0.089_484_18 * a - 1.291_485_5 * b).powi(3);
+    [
+        4.076_741_7 * lc - 3.307_711_6 * mc + 0.230_969_94 * sc,
+        -1.268_438 * lc + 2.609_757_4 * mc - 0.341_319_38 * sc,
+        -0.004_196_086_3 * lc - 0.703_418_6 * mc + 1.707_614_7 * sc,
+    ]
+}
+
+/// A linear sRGB channel as an 8-bit sRGB value.
+fn to_srgb(v: f32) -> u8 {
+    let v = v.clamp(0.0, 1.0);
+    let s = if v <= 0.003_130_8 { 12.92 * v } else { 1.055 * v.powf(1.0 / 2.4) - 0.055 };
+    (s * 255.0).round().clamp(0.0, 255.0) as u8
 }
 
 /// Invert HSL lightness, keeping hue and saturation: shifting every channel by
@@ -577,6 +624,10 @@ fn blend_backgrounds(items: &[Draw], p: wordcraft_geom::Point, opts: &RenderOpti
             }
             Draw::Figure { draws, .. } => {
                 blend_backgrounds(draws, p, opts, bg, depth + 1);
+                continue;
+            }
+            Draw::Kept { items } => {
+                blend_backgrounds(items, p, &RenderOptions { dark: false, ..opts.clone() }, bg, depth + 1);
                 continue;
             }
             _ => continue,
@@ -1470,7 +1521,7 @@ mod tests {
         let l = layout(&d, &mut LayoutCache::new(), &LayoutOptions::default());
         let opts = RenderOptions { dark: true, ..Default::default() };
         assert_eq!(opts.ink(Rgb::WHITE), Rgb(DARK_PAPER, DARK_PAPER, DARK_PAPER));
-        assert_eq!(opts.ink(Rgb::BLACK), Rgb::WHITE);
+        assert_eq!(opts.ink(Rgb::BLACK), Rgb(246, 246, 246));
         let img = render_page(&d, &l.pages[0], 1.0, &opts);
         assert_eq!(img.pixel(5, 5), [DARK_PAPER, DARK_PAPER, DARK_PAPER, 255]);
         let light = (72..300).flat_map(|x| (72..100).map(move |y| (x, y))).filter(|(x, y)| img.pixel(*x, *y)[0] > 128).count();
@@ -1543,57 +1594,64 @@ mod tests {
         assert!(r8.abs_diff(g8) <= 4 && g8 > b8.saturating_add(0x20), "dark page highlight stays yellow in hue, got {:?}", (r8, g8, b8));
     }
 
-    /// #1252: on a dark page every highlight colour is dimmed so the text drawn on it reads
-    /// (Automatic and explicit black text both draw white); a light page is the identity.
+    /// A dark page turns colours as the reference does (measured on its greys and a set of hues):
+    /// black to a light grey, white to the paper, greys and colours by lightness with their hue.
     #[test]
-    fn dark_page_text_backgrounds_keep_text_readable() {
+    fn dark_page_turns_colours_as_the_reference() {
+        let dark = RenderOptions { dark: true, dark_paper: 0x14, ..Default::default() };
+        let near = |c: Rgb, want: (u8, u8, u8), tol: u8| {
+            let Rgb(r, g, b) = dark.ink(c);
+            assert!(r.abs_diff(want.0) <= tol && g.abs_diff(want.1) <= tol && b.abs_diff(want.2) <= tol, "{c:?} → {:?}, want {want:?}", (r, g, b));
+        };
+        near(Rgb::BLACK, (246, 246, 246), 0);
+        near(Rgb::WHITE, (0x14, 0x14, 0x14), 0);
+        for (v, want) in [(0x33, 212), (0x66, 176), (0x99, 136), (0xCC, 91), (0xF2, 52), (0xFE, 39)] {
+            near(Rgb(v, v, v), (want, want, want), 8);
+        }
+        for (c, want) in [
+            (Rgb(0x44, 0x72, 0xC4), (135, 164, 243)),
+            (Rgb(0x1F, 0x38, 0x64), (195, 208, 248)),
+            (Rgb(0xD9, 0xE2, 0xF3), (61, 70, 87)),
+            (Rgb(0xFF, 0, 0), (235, 90, 83)),
+            (Rgb(0x70, 0x30, 0xA0), (214, 171, 249)),
+            (Rgb(0x37, 0x56, 0x23), (182, 200, 169)),
+            (Rgb(0xFF, 0xFF, 0), (81, 81, 21)),
+        ] {
+            near(c, want, 30);
+        }
+        // greys stay grey, darker in for lighter out
+        let greys: Vec<u8> = (0..=254u8).step_by(17).map(|v| dark.ink(Rgb(v, v, v)).0).collect();
+        assert!(greys.windows(2).all(|w| w[0] > w[1]), "{greys:?}");
+        let light = RenderOptions::default();
+        assert_eq!(light.ink(Rgb(0x44, 0x72, 0xC4)), Rgb(0x44, 0x72, 0xC4), "a light page keeps colours");
+    }
+
+    /// On a dark page the text on a highlight stays light, Automatic or black, as the reference
+    /// keeps it white; a highlight turns as other colours do (yellow to a dim olive).
+    #[test]
+    fn dark_page_text_on_highlights_stays_light() {
         use wordcraft_doc::props::{Highlight, TextColor};
         use wordcraft_layout::display::text_color;
         let dark = RenderOptions { dark: true, ..Default::default() };
         let light = RenderOptions::default();
-        let colours: Vec<Rgb> = Highlight::ALL.iter().filter_map(|h| h.rgb()).collect();
-        assert_eq!(colours.len(), 16);
-        for c in colours {
-            let bg = dark.ink_bg(c);
-            for (what, tc) in [("automatic", text_color(&TextColor::Auto, Some(c))), ("black", Rgb::BLACK)] {
+        for c in Highlight::ALL.iter().filter_map(|h| h.rgb()) {
+            for tc in [text_color(&TextColor::Auto, Some(c)), Rgb::BLACK] {
                 let fg = dark.ink_text(tc, Some(c));
-                assert_eq!(fg, Rgb::WHITE, "{what} text on {c:?} draws white");
-                let k = contrast(fg, bg);
-                assert!(k >= 4.5, "{what} text on {c:?}: {fg:?} on {bg:?} has contrast {k:.2}");
+                assert!(fg.luma() > 200.0, "{tc:?} text on {c:?} draws {fg:?}");
             }
             assert_eq!(light.ink_bg(c), c, "light page keeps {c:?}");
             assert_eq!(light.ink_text(c, Some(c)), c, "light page keeps text {c:?}");
         }
-        // Yellow turns a dim olive (~#4a4a10), still yellow in hue.
         let Rgb(r, g, b) = dark.ink_bg(Rgb(255, 255, 0));
-        assert!(r.abs_diff(0x4A) <= 8 && g.abs_diff(0x4A) <= 8 && b.abs_diff(0x10) <= 8, "yellow → {:?}", (r, g, b));
-        assert!(r == g && g > b);
-        // Text off a highlight keeps the plain inversion.
+        assert!(r == g && g > b && r < 0x60, "yellow → {:?}", (r, g, b));
+        // text off a highlight turns as other colours do
         assert_eq!(dark.ink_text(Rgb::WHITE, None), dark.ink(Rgb::WHITE));
     }
 
-    /// #1252 review: explicit coloured text (pure blue, red, every highlight colour) on every
-    /// dimmed highlight still reaches 4.5:1 on a dark page.
+    /// An Automatic underline on a black highlight stays light on a dark page, as the text it
+    /// underlines does.
     #[test]
-    fn dark_page_coloured_text_on_highlights_reads() {
-        use wordcraft_doc::props::Highlight;
-        let dark = RenderOptions { dark: true, ..Default::default() };
-        let colours: Vec<Rgb> = Highlight::ALL.iter().filter_map(|h| h.rgb()).collect();
-        let texts: Vec<Rgb> = [Rgb(0, 0, 255), Rgb(255, 0, 0)].into_iter().chain(colours.iter().copied()).collect();
-        for &h in &colours {
-            let bg = dark.ink_bg(h);
-            for &tc in &texts {
-                let fg = dark.ink_text(tc, Some(h));
-                let k = contrast(fg, bg);
-                assert!(k >= 4.5, "text {tc:?} on {h:?}: {fg:?} on {bg:?} has contrast {k:.2}");
-            }
-        }
-    }
-
-    /// #1252 review: an Automatic underline on a dark highlight (black) draws light on a dark page,
-    /// like the text it underlines, not the dark grey plain inversion gives white.
-    #[test]
-    fn dark_page_underline_on_a_dark_highlight_reads() {
+    fn dark_page_underline_on_a_dark_highlight_stays_light() {
         use wordcraft_doc::props::{Highlight, Underline};
         let cp =
             wordcraft_doc::CharProps { highlight: Some(Highlight::Black), underline: Some(Underline::Thick), size: Some(24.0), ..Default::default() };
