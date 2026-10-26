@@ -27,8 +27,8 @@ list (author, source, license) is in ATTRIBUTION.md.
 
 Downloaded at build time, never in this repository, bundled in the app with their licenses:
 
-- Carlito and Caladea typefaces (from google/fonts, pinned to a commit and checked against their
-  SHA-256) — SIL Open Font License 1.1.
+- Carlito, Caladea, STIX Two Math and Courier Prime typefaces (from google/fonts, pinned to a commit
+  and checked against their SHA-256) — SIL Open Font License 1.1.
 - Liberation Sans, Serif and Mono 2.1.5 (from liberation-fonts' release, checked against its
   SHA-256) — SIL Open Font License 1.1.
 
