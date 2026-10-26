@@ -413,8 +413,8 @@ pub struct StyleLook {
     pub indent: f32,
 }
 
-/// The recommended styles the Styles list ends with, in its order (the headings after the first
-/// appear one level at a time, as the one above is used).
+/// The built-in styles the Styles list offers though the document lacks them (its other
+/// built-ins are listed once the document has them), as the phone app's latent styles.
 const RECOMMENDED_STYLES: &[&str] = &[
     "No Spacing",
     "Heading 1",
@@ -437,6 +437,7 @@ const RECOMMENDED_STYLES: &[&str] = &[
     "Subtle Reference",
     "Intense Reference",
     "Book Title",
+    "List Paragraph",
 ];
 
 /// What the Styles list calls built-in style `name`: the comment styles go by their feature's
@@ -1054,21 +1055,23 @@ impl MobileSession {
         self.lock().find.results.clear();
     }
 
-    /// The Styles list: the document's own styles by name, then the recommended ones (a built-in
-    /// one the document lacks is added when applied), each with its look.
+    /// The Styles list as the phone app shows it: the document's styles that aren't hidden (or
+    /// are used), the recommended built-ins it lacks (one is added when applied), and Heading n
+    /// once Heading n-1 shows; all by priority (none counts as 0), then name, each with its look.
     pub fn style_looks(&self) -> Vec<StyleLook> {
         use wordcraft_engine::doc::props::{CharProps, ParaProps, TextColor, Underline};
-        use wordcraft_engine::doc::styles::{StyleKind, StyleSheet};
+        use wordcraft_engine::doc::styles::{Style, StyleKind, StyleSheet, heading_level};
         let s = self.lock();
         let doc = &s.doc;
         let builtin = StyleSheet::builtin();
-        // the paragraph styles the body uses, for the headings shown one level at a time
-        let used: std::collections::HashSet<String> = doc
-            .para_paths(wordcraft_engine::doc::StoryRef::Body)
-            .into_iter()
-            .take(100_000)
-            .filter_map(|path| doc.para(wordcraft_engine::doc::StoryRef::Body, &path).and_then(|p| p.props.style.clone()))
-            .collect();
+        // the paragraph and character styles the body uses: a hidden style shows once used
+        let mut used = std::collections::HashSet::new();
+        for path in doc.para_paths(wordcraft_engine::doc::StoryRef::Body).into_iter().take(100_000) {
+            if let Some(p) = doc.para(wordcraft_engine::doc::StoryRef::Body, &path) {
+                used.extend(p.props.style.clone());
+                used.extend(p.run_ranges().filter_map(|(_, c)| c.style.clone()));
+            }
+        }
         let look = |sheet: &StyleSheet, st: &wordcraft_engine::doc::styles::Style| {
             let character = st.kind == StyleKind::Character;
             let c = if character {
@@ -1095,37 +1098,35 @@ impl MobileSession {
                 indent: if indent.is_finite() { indent.clamp(0.0, 400.0) } else { 0.0 },
             }
         };
-        let recommended = |name: &str| RECOMMENDED_STYLES.iter().any(|r| r.eq_ignore_ascii_case(name));
-        let mut own: Vec<StyleLook> = doc
+        // shown by its flags (a hidden Heading n beside a shown Heading n-1 too), or used, or a
+        // heading below one that is used
+        let used_heading = |n: u32| doc.styles.find(&format!("Heading {n}")).is_some_and(|st| used.contains(&st.id));
+        let shown = |st: &Style| {
+            doc.styles.shown_in_lists(st) || used.contains(&st.id) || heading_level(&st.name).is_some_and(|n| n > 1 && used_heading(n - 1))
+        };
+        let mut list: Vec<(u32, StyleLook)> = doc
             .styles
             .styles
             .iter()
-            .filter(|st| matches!(st.kind, StyleKind::Paragraph | StyleKind::Character) && !st.hidden && !recommended(&st.name))
-            .map(|st| look(&doc.styles, st))
+            .filter(|st| matches!(st.kind, StyleKind::Paragraph | StyleKind::Character))
+            .filter(|st| shown(st))
+            .map(|st| (st.priority.unwrap_or(0), look(&doc.styles, st)))
             .collect();
-        own.sort_by_key(|l| l.name.to_lowercase());
         for name in RECOMMENDED_STYLES {
-            // Heading n shows once Heading n-1 is used
-            if let Some(level) = name.strip_prefix("Heading ").and_then(|n| n.parse::<u32>().ok())
-                && level > 1
-            {
-                let above = format!("Heading {}", level - 1);
-                let id = doc.styles.find(&above).map(|st| st.id.clone()).unwrap_or_default();
-                if !used.contains(&id) {
-                    continue;
-                }
+            if doc.styles.find(name).is_some() {
+                continue;
             }
-            match doc.styles.find(name) {
-                Some(st) if !st.hidden => own.push(look(&doc.styles, st)),
-                Some(_) => {}
-                None => {
-                    if let Some(st) = builtin.find(name) {
-                        own.push(look(&builtin, st));
-                    }
-                }
+            // a built-in the document lacks shows as in a new document, a lower heading once the
+            // one above it shows or is used
+            let revealed = heading_level(name).is_some_and(|n| {
+                n > 1 && doc.styles.find(&format!("Heading {}", n - 1)).map_or(n == 2, |above| !above.hidden || used.contains(&above.id))
+            });
+            if let Some(st) = builtin.find(name).filter(|st| revealed || builtin.shown_in_lists(st)) {
+                list.push((st.priority.unwrap_or(0), look(&builtin, st)));
             }
         }
-        own
+        list.sort_by_cached_key(|(priority, l)| (*priority, l.name.to_lowercase()));
+        list.into_iter().map(|(_, l)| l).collect()
     }
 
     /// The selected picture's or shape's alt text, for its Alt Text pane; `None` with no object

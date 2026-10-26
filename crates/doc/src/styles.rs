@@ -535,7 +535,8 @@ impl StyleSheet {
                     ..para()
                 },
                 chr: CharProps { font: Some(font.into()), size: Some(size), italic, color: color(c), ..chr() },
-                priority: Some(9 + n as u32),
+                // every heading level is 9, as in Word's own styles
+                priority: Some(9),
                 quick: n <= 3,
                 ..p_style()
             });
@@ -713,8 +714,28 @@ impl StyleSheet {
             table: Some(TableStyleParts { borders: Some(Borders::all(Border::single(0.5))), ..Default::default() }),
             ..Default::default()
         });
+        // Word keeps these out of its lists until they are used (`w:semiHidden` with
+        // `w:unhideWhenUsed`): the headings below the first, captions, headers and footers,
+        // notes, links and contents entries.
+        for st in &mut s.styles {
+            let lower_heading = st.id.strip_prefix("Heading").and_then(|n| n.parse::<u32>().ok()).is_some_and(|n| n > 1);
+            if lower_heading || st.id.starts_with("TOC") || HIDDEN_UNTIL_USED.contains(&st.id.as_str()) {
+                st.hidden = true;
+            }
+        }
         s.styles.extend(table_styles());
         s
+    }
+
+    /// Whether `st` shows in the Styles gallery and lists (given it is a paragraph or character
+    /// style): when not hidden, and a hidden Heading n when Heading n-1 shows by its own flags
+    /// (as Word offers Heading 2 beside Heading 1, and Heading 3 once Heading 2 has been used).
+    pub fn shown_in_lists(&self, st: &Style) -> bool {
+        if !st.hidden {
+            return true;
+        }
+        let Some(n) = heading_level(&st.name) else { return false };
+        n > 1 && self.find(&format!("Heading {}", n - 1)).map_or(n == 2, |above| !above.hidden)
     }
 
     pub fn get(&self, id: &str) -> Option<&Style> {
@@ -729,7 +750,7 @@ impl StyleSheet {
     }
     /// The Quick Styles gallery, in priority order.
     pub fn gallery(&self) -> Vec<&Style> {
-        let mut v: Vec<&Style> = self.styles.iter().filter(|s| s.quick && !s.hidden && s.kind != StyleKind::Table).collect();
+        let mut v: Vec<&Style> = self.styles.iter().filter(|s| s.quick && s.kind != StyleKind::Table && self.shown_in_lists(s)).collect();
         v.sort_by_key(|s| (s.priority.unwrap_or(99), s.name.clone()));
         v
     }
@@ -845,6 +866,17 @@ impl StyleSheet {
 
 fn p_style() -> Style {
     Style { kind: StyleKind::Paragraph, builtin: true, ..Default::default() }
+}
+
+/// Built-in styles (by id) Word hides until they are used, besides the lower headings and the
+/// contents entries.
+const HIDDEN_UNTIL_USED: [&str; 8] =
+    ["Caption", "Header", "Footer", "FootnoteText", "FootnoteReference", "EndnoteText", "EndnoteReference", "Hyperlink"];
+
+/// `n` for a style named "Heading n" (any case), 1-9.
+pub fn heading_level(name: &str) -> Option<u32> {
+    let rest = name.get(..8).filter(|h| h.eq_ignore_ascii_case("heading "))?;
+    name.get(rest.len()..)?.trim().parse::<u32>().ok().filter(|n| (1..=9).contains(n))
 }
 
 /// A few table styles of our own (grid, plain, light/medium accents).

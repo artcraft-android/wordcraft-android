@@ -479,6 +479,10 @@ fn apply_styles(s: &mut Session, v: &Value) -> CmdResult {
 fn apply_style(s: &mut Session, v: &Value) -> CmdResult {
     let name = p::req_str(v, "style")?;
     let id = style_id_or_builtin(s, name)?;
+    // a style hidden until used shows in the lists from now on (Word's `w:unhideWhenUsed`)
+    if let Some(st) = s.doc.styles.get_mut(&id) {
+        st.hidden = false;
+    }
     let kind = s.doc.styles.get(&id).map(|x| x.kind).unwrap_or_default();
     if kind == StyleKind::Character {
         return super::format::apply(s, &|c| c.style = Some(id.clone()));

@@ -536,20 +536,26 @@ fn the_session_can_move_between_threads() {
 }
 
 #[test]
-fn the_styles_list_has_the_documents_styles_then_the_recommended_ones() {
+fn the_styles_list_shows_what_the_phone_app_shows_by_priority() {
     let m = MobileSession::new();
     let looks = m.style_looks();
     let names: Vec<&str> = looks.iter().map(|l| l.name.as_str()).collect();
     let at = |n: &str| names.iter().position(|x| *x == n).unwrap_or_else(|| panic!("{n} in {names:?}"));
-    assert!(at("Normal") < at("No Spacing"), "the document's own first: {names:?}");
-    assert!(at("No Spacing") < at("Heading 1") && at("Heading 1") < at("Title"));
-    assert!(!names.contains(&"Heading 2"), "Heading 2 waits for Heading 1 to be used");
+    // by priority, then name: Normal 0, No Spacing 1, the headings 9, Title 10…
+    assert!(at("Normal") < at("No Spacing") && at("No Spacing") < at("Heading 1"), "{names:?}");
+    assert!(at("Heading 1") < at("Heading 2") && at("Heading 2") < at("Title") && at("Title") < at("Subtitle"));
+    assert!(at("Book Title") < at("List Paragraph"));
+    // hidden until used: Heading 3 on, captions, headers, contents entries
+    for hidden in ["Heading 3", "Caption", "Header", "TOC 1", "Hyperlink"] {
+        assert!(!names.contains(&hidden), "{hidden} waits to be used: {names:?}");
+    }
     let h1 = &looks[at("Heading 1")];
     assert!(h1.size > looks[at("Normal")].size && !h1.character);
     assert!(looks.iter().any(|l| l.character), "character styles too");
     // a heading used brings the next level
-    m.execute("para.style".into(), r#"{"style": "Heading 1"}"#.into()).unwrap();
-    assert!(m.style_looks().iter().any(|l| l.name == "Heading 2"));
+    m.execute("para.style".into(), r#"{"style": "Heading 2"}"#.into()).unwrap();
+    let names: Vec<String> = m.style_looks().into_iter().map(|l| l.name).collect();
+    assert!(names.iter().any(|n| n == "Heading 3") && !names.iter().any(|n| n == "Heading 4"), "{names:?}");
     assert_eq!(style_display_name("annotation text"), "Comment Text");
     assert_eq!(style_display_name("Footer"), "Footer");
 }

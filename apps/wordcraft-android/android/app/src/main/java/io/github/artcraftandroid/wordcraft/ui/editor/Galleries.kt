@@ -67,7 +67,8 @@ import java.util.Locale
 @Composable
 internal fun StyleRow(l: StyleLook, selected: Boolean, onClick: () -> Unit) {
     Box(
-        Modifier.fillMaxWidth().height(40.dp).background(if (selected) WordColors.Pressed else WordColors.Surface).clickable(onClick = onClick),
+        Modifier.fillMaxWidth().height(40.dp).background(if (selected) WordColors.Pressed else WordColors.Surface).clickable(onClick = onClick)
+            .semantics { contentDescription = "${l.name} list item"; this.selected = selected },
         contentAlignment = Alignment.CenterStart,
     ) {
         Text(

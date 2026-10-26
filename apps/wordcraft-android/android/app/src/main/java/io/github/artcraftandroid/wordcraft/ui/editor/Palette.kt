@@ -623,7 +623,7 @@ private fun LineSpacingPanel(vm: AppViewModel) {
 @Composable
 private fun StylesPanel(vm: AppViewModel) {
     val current = vm.format?.styleName
-    // the document's own styles, then the recommended ones, each drawn in its style
+    // the styles the document offers, by priority as the phone app lists them, each drawn in its style
     LaunchedEffect(vm.info?.documentId, vm.info?.revision) { vm.loadStyleLooks() }
     LazyColumn(Modifier.fillMaxSize()) {
         items(vm.styleLooks) { look ->
