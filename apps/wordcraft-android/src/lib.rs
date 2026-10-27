@@ -1650,6 +1650,9 @@ fn from_hsl(h: f64, s: f64, l: f64) -> wordcraft_engine::doc::props::Rgb {
 
 /// How the editor draws pages: as the desktop does on screen (formatting marks, markup and the
 /// dark page as the view has them; headers and footers dimmed while the body is edited).
+/// The pad around Mobile View's page on the screen, points (the app's `MOBILE_PAD_PT`).
+const MOBILE_PAD_PT: f32 = 5.0;
+
 fn render_options(s: &Session) -> RenderOptions {
     let mut opts = RenderOptions::default();
     opts.display.marks = s.view.marks;
@@ -1659,6 +1662,10 @@ fn render_options(s: &Session) -> RenderOptions {
     opts.display.simple_markup = s.view.markup_view == wordcraft_engine::MarkupView::Simple;
     opts.display.hide_ink = s.view.hide_ink;
     opts.display.revisions = s.prefs.markup.clone();
+    // Mobile View's page sits inside a pad on the screen; its margin shows wider by that much
+    if s.view.mobile {
+        opts.display.outer_margin = MOBILE_PAD_PT;
+    }
     opts.dark = s.view.dark_mode;
     opts.dark_paper = DARK_PAPER;
     opts

@@ -1078,6 +1078,13 @@ four"}),
         let (d, body_x) = draws(&mut s);
         let bars: Vec<_> = lines(&d).into_iter().filter(|(x0, _, x1, _)| x0 == x1 && *x0 < body_x).collect();
         assert_eq!(bars.len(), 2, "one bar beside one and two, one beside four: {bars:?}");
+        assert!((bars[0].0 - body_x / 2.0).abs() < 0.01, "in the middle of the margin: {bars:?}");
+        // with margin shown beyond the page (Mobile View's pad), in the middle of all of it
+        let l = s.layout();
+        let opts = DisplayOptions { revisions: s.prefs.markup.clone(), outer_margin: 5.0, ..Default::default() };
+        let padded = page_display(&s.doc, &l.pages[0], &opts);
+        let x = lines(&padded).into_iter().find(|(x0, _, x1, _)| x0 == x1 && *x0 < body_x).map(|l| l.0);
+        assert_eq!(x, Some((body_x + 5.0) / 2.0 - 5.0));
     }
 
     /// #328: Track Changes Options change how an insertion and a deletion are drawn, the bar

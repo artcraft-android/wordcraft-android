@@ -188,6 +188,9 @@ pub struct DisplayOptions {
     /// What is behind the text being drawn where it has no shading of its own: a filled text
     /// box's fill, which automatic text is read against (white on a dark fill).
     pub ground: Option<Rgb>,
+    /// Points of margin the screen shows beyond each side of the page (Mobile View's pad on a
+    /// phone): change bars go in the middle of the margin as seen, page margin and pad together.
+    pub outer_margin: f32,
 }
 
 impl Default for DisplayOptions {
@@ -203,6 +206,7 @@ impl Default for DisplayOptions {
             hide_ink: false,
             revisions: MarkupOptions::default(),
             ground: None,
+            outer_margin: 0.0,
         }
     }
 }
@@ -421,7 +425,7 @@ pub fn page_display(doc: &Document, page: &Page, opts: &DisplayOptions) -> Vec<D
         }
     }
     if opts.markup && (opts.revisions.insertions_deletions || opts.revisions.formatting) && opts.revisions.changed_lines != ChangeBar::None {
-        change_bars(doc, page, &opts.revisions, ba, &mut out);
+        change_bars(doc, page, &opts.revisions, ba, opts.outer_margin, &mut out);
     } else if opts.simple_markup && !opts.markup {
         // the final text, each changed line marked by a red bar where the bars go
         let bars = MarkupOptions {
@@ -430,7 +434,7 @@ pub fn page_display(doc: &Document, page: &Page, opts: &DisplayOptions) -> Vec<D
             insertions_deletions: true,
             ..opts.revisions.clone()
         };
-        change_bars(doc, page, &bars, ba, &mut out);
+        change_bars(doc, page, &bars, ba, opts.outer_margin, &mut out);
     }
     out
 }
@@ -615,15 +619,18 @@ pub const SIMPLE_MARKUP_BAR: Rgb = Rgb(0xD1, 0x34, 0x38);
 
 /// Bars in the margin beside body lines with tracked insertions or deletions, or (when shown)
 /// tracked formatting changes of their text, paragraph or paragraph mark.
-fn change_bars(doc: &Document, page: &Page, m: &MarkupOptions, alpha: f32, out: &mut Vec<Draw>) {
+fn change_bars(doc: &Document, page: &Page, m: &MarkupOptions, alpha: f32, outer: f32, out: &mut Vec<Draw>) {
     // Outside: the left margin, or the outer one of a right-hand page with mirrored margins.
     let right = match m.changed_lines {
         ChangeBar::Right => true,
         ChangeBar::Outside => doc.settings.mirror_margins && page.number % 2 == 1,
         _ => false,
     };
-    // in the middle of the margin, as the phone app draws them on its pages and in Mobile View
-    let bx = if right { page.body.right() + (page.w - page.body.right()).max(0.0) / 2.0 } else { page.body.x.max(0.0) / 2.0 };
+    // in the middle of the margin as seen (with `outer` shown beyond the page), as the phone app
+    // draws them on its pages and in Mobile View
+    let outer = if outer.is_finite() { outer.clamp(0.0, 200.0) } else { 0.0 };
+    let bx =
+        if right { page.body.right() + ((page.w - page.body.right()).max(0.0) + outer) / 2.0 } else { (page.body.x.max(0.0) + outer) / 2.0 - outer };
     let color = m.changed_lines_color.unwrap_or(CHANGE_BAR);
     // changed lines one after another make one bar, over the spacing between their paragraphs
     // too, as the phone app draws it
