@@ -142,9 +142,21 @@ fn new_comment(s: &mut Session, v: &Value) -> CmdResult {
     let part = s.doc.try_add_part(PartKind::Comment, vec![para_block(Paragraph::with_text(&text, Default::default()))])?;
     let id = comment_id(s)?;
     let initials = s.user_initials();
-    s.doc
-        .comments
-        .insert(id, Comment { author: s.author.clone(), initials, date: now_iso(), parent: None, resolved: false, part, ..Default::default() });
+    // made now: the time is UTC, and said so (a file's own `w:date` is the writer's local time)
+    let date = now_iso();
+    s.doc.comments.insert(
+        id,
+        Comment {
+            author: s.author.clone(),
+            initials,
+            date: date.clone(),
+            date_utc: Some(date),
+            parent: None,
+            resolved: false,
+            part,
+            ..Default::default()
+        },
+    );
     let props = Default::default();
     s.doc.insert_object(&b, InlineObject::CommentEnd { id }, &props)?;
     s.doc.insert_object(&a, InlineObject::CommentStart { id }, &props)?;
@@ -161,9 +173,19 @@ fn reply(s: &mut Session, v: &Value) -> CmdResult {
     let part = s.doc.try_add_part(PartKind::Comment, vec![para_block(Paragraph::with_text(text, Default::default()))])?;
     let id = comment_id(s)?;
     let initials = s.user_initials();
+    let date = now_iso();
     s.doc.comments.insert(
         id,
-        Comment { author: s.author.clone(), initials, date: now_iso(), parent: Some(parent), resolved: false, part, ..Default::default() },
+        Comment {
+            author: s.author.clone(),
+            initials,
+            date: date.clone(),
+            date_utc: Some(date),
+            parent: Some(parent),
+            resolved: false,
+            part,
+            ..Default::default()
+        },
     );
     Ok(json!({"id": id}))
 }
@@ -301,6 +323,24 @@ pub fn comment_list(s: &Session) -> Vec<(u32, Option<Pos>)> {
     found
 }
 
+/// Where comment `id`'s range in the body starts and ends (its start and end markers), if both are there.
+pub fn comment_range(s: &Session, id: u32) -> Option<(Pos, Pos)> {
+    let (mut start, mut end) = (None, None);
+    for path in s.doc.para_paths(StoryRef::Body) {
+        let Some(p) = s.doc.para(StoryRef::Body, &path) else { continue };
+        for o in p.object_offsets() {
+            match p.object_at(o) {
+                Some(InlineObject::CommentStart { id: x }) if *x == id && start.is_none() => {
+                    start = Some(Pos { story: StoryRef::Body, path: path.clone(), off: o })
+                }
+                Some(InlineObject::CommentEnd { id: x }) if *x == id => end = Some(Pos { story: StoryRef::Body, path: path.clone(), off: o }),
+                _ => {}
+            }
+        }
+    }
+    Some((start?, end?))
+}
+
 fn list_comments(s: &mut Session, _: &Value) -> CmdResult {
     let list = comment_list(s);
     Ok(Value::Array(
@@ -308,7 +348,7 @@ fn list_comments(s: &mut Session, _: &Value) -> CmdResult {
             .filter_map(|(id, pos)| {
                 let c = s.doc.comments.get(id)?;
                 Some(json!({
-                    "id": id, "author": c.author, "date": c.date, "resolved": c.resolved, "parent": c.parent,
+                    "id": id, "author": c.author, "initials": c.initials, "date": c.date, "dateUtc": c.date_utc, "resolved": c.resolved, "parent": c.parent,
                     "text": s.doc.plain_text(StoryRef::Part(c.part)),
                     "anchor": pos.as_ref().map(pos_json),
                 }))
@@ -1056,6 +1096,49 @@ mod tests {
         d.iter().filter_map(|x| if let Draw::Line { x0, y0, x1, y1, .. } = x { Some((*x0, *y0, *x1, *y1)) } else { None }).collect()
     }
 
+    /// A comment and its reply share a range: the shade covers the commented words only, not
+    /// the paragraph before them.
+    #[test]
+    fn a_threads_shade_covers_only_its_words() {
+        let mut s = Session::new(Document::new());
+        s.view.proofing = false;
+        s.run("document.setText", &json!({"text": "The garden grows"})).unwrap();
+        s.run("select.text", &json!({"text": "garden"})).unwrap();
+        let id = s.run("review.newComment", &json!({"text": "Which?"})).unwrap()["id"].as_u64().unwrap() as u32;
+        // a reply anchored as the reference's files anchor them: its own markers round the same words
+        let reply = s.run("review.reply", &json!({"id": id, "text": "North."})).unwrap()["id"].as_u64().unwrap() as u32;
+        let (a, b) = super::comment_range(&s, id).unwrap();
+        s.doc.insert_object(&b, wordcraft_doc::InlineObject::CommentEnd { id: reply }, &Default::default()).unwrap();
+        s.doc.insert_object(&a, wordcraft_doc::InlineObject::CommentStart { id: reply }, &Default::default()).unwrap();
+        s.relayout();
+        let (d, body_x) = draws(&mut s);
+        let shades: Vec<f32> = d
+            .iter()
+            .filter_map(|x| {
+                if let Draw::Fill { rect, color, .. } = x { (*color == wordcraft_doc::Rgb(0xE8, 0xE8, 0xE8)).then_some(rect.x) } else { None }
+            })
+            .collect();
+        assert!(!shades.is_empty() && shades.iter().all(|x| *x > body_x + 10.0), "{shades:?} from {body_x}");
+    }
+
+    /// A comment made here carries its time as UTC, said so (`dateUtc`), for the phone app's
+    /// rule: a UTC time is shown in the reader's zone, a file's own `w:date` as written.
+    #[test]
+    fn comments_made_here_say_their_time_is_utc() {
+        let mut s = Session::new(Document::new());
+        s.run("document.setText", &json!({"text": "one two"})).unwrap();
+        s.run("select.text", &json!({"text": "two"})).unwrap();
+        let id = s.run("review.newComment", &json!({"text": "note"})).unwrap()["id"].as_u64().unwrap();
+        s.run("review.reply", &json!({"id": id, "text": "answer"})).unwrap();
+        let list = s.run("review.comments", &json!({})).unwrap();
+        let all = list.as_array().unwrap();
+        assert_eq!(all.len(), 2);
+        for c in all {
+            assert!(c["date"].as_str().unwrap().ends_with('Z'), "{c}");
+            assert_eq!(c["dateUtc"], c["date"], "{c}");
+        }
+    }
+
     /// Changed lines one after another make one bar beside them, over the spacing between their
     /// paragraphs, as the phone app draws it; an unchanged line between breaks it.
     #[test]
@@ -1079,6 +1162,11 @@ four"}),
         let bars: Vec<_> = lines(&d).into_iter().filter(|(x0, _, x1, _)| x0 == x1 && *x0 < body_x).collect();
         assert_eq!(bars.len(), 2, "one bar beside one and two, one beside four: {bars:?}");
         assert!((bars[0].0 - body_x / 2.0).abs() < 0.01, "in the middle of the margin: {bars:?}");
+        let widths: Vec<f32> = d
+            .iter()
+            .filter_map(|x| if let Draw::Line { x0, x1, width, .. } = x { (x0 == x1 && *x0 < body_x).then_some(*width) } else { None })
+            .collect();
+        assert_eq!(widths, [1.25, 1.25], "as wide as the phone app's");
         // with margin shown beyond the page (Mobile View's pad), in the middle of all of it
         let l = s.layout();
         let opts = DisplayOptions { revisions: s.prefs.markup.clone(), outer_margin: 5.0, ..Default::default() };

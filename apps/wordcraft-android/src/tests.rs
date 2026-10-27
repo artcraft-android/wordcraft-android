@@ -840,8 +840,17 @@ fn comment_marks_point_at_each_threads_line() {
     m.execute("review.newComment".into(), json!({ "text": "Check this." }).to_string()).unwrap();
     let marks = m.comment_marks();
     assert_eq!(marks.len(), 1, "{marks:?}");
-    let first = &marks[0];
+    let first = &marks[0].line;
     assert!(first.height > 0.0 && first.y > 0.0, "{first:?}");
+    // the mark names its thread, and the list gives the thread's initials
+    let list: serde_json::Value = serde_json::from_str(&m.execute("review.comments".into(), "{}".into()).unwrap()).unwrap();
+    assert_eq!(list[0]["id"], marks[0].id);
+    assert!(list[0]["initials"].is_string(), "{list}");
+    // its range on the page: the words it is on, on the anchor's line
+    let range = m.comment_range_rects(marks[0].id);
+    assert_eq!(range.len(), 1, "{range:?}");
+    assert!(range[0].width > 10.0 && (range[0].y - first.y).abs() < 1.0, "{range:?} {first:?}");
+    assert!(m.comment_range_rects(999).is_empty());
 }
 
 /// A new document opens at 100%, the zoom it is saved at.

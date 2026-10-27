@@ -77,7 +77,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             WordcraftTheme(vm.themeChoice) {
                 // the bars' icons follow the app's theme (which may differ from the phone's)
-                val dark = io.github.artcraftandroid.wordcraft.ui.WordColors.dark
+                // (dark icons over the light Comments pane while a comment is written)
+                val dark = io.github.artcraftandroid.wordcraft.ui.WordColors.dark && !(vm.commentsOpen && vm.commentWriting)
                 androidx.compose.runtime.SideEffect {
                     androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
                         isAppearanceLightStatusBars = !dark

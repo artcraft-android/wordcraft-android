@@ -158,7 +158,7 @@ private fun InsertTab(vm: AppViewModel) {
         PaletteRow("Shapes", LucideIcons.Shapes.glyph(), onClick = { vm.pushPanel("shapes") }, chevron = true)
         PaletteRow("Text Box", LucideIcons.TextCursorInput.glyph(), onClick = { vm.command("insert.textBox") })
         PaletteRow("Link", LucideIcons.Link.glyph(), onClick = { vm.pushPanel("link") }, chevron = true)
-        PaletteRow("Comment", LucideIcons.MessageSquarePlus.glyph(), onClick = { vm.commentsOpen = true })
+        PaletteRow("Comment", LucideIcons.MessageSquarePlus.glyph(), onClick = { vm.openComments(write = true) })
         PaletteRow("Header & Footer", LucideIcons.PanelTop.glyph(), onClick = {
             vm.command("insert.editHeader")
             vm.closePalette()
@@ -529,7 +529,7 @@ private fun ReviewTab(vm: AppViewModel) {
         Band()
         PaletteRow("Word Count", LucideIcons.FileDigit.glyph(), onClick = { vm.pushPanel("wordCount") }, chevron = true)
         Band()
-        PaletteRow("New Comment", LucideIcons.MessageSquarePlus.glyph(), onClick = { vm.commentsOpen = true })
+        PaletteRow("New Comment", LucideIcons.MessageSquarePlus.glyph(), onClick = { vm.openComments(write = true) })
         // Delete and Resolve act on the comment at the caret
         val here = r?.commentHere == true
         PaletteRow("Delete", LucideIcons.MessageSquareX.glyph(), onClick = { vm.command("review.deleteComment") }, onOpen = { vm.pushPanel("deleteComment") }, enabled = here)

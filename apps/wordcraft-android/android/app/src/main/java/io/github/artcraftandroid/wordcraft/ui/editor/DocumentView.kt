@@ -373,6 +373,8 @@ fun DocumentView(
     highlights: List<io.github.artcraftandroid.wordcraft.core.PageRect> = emptyList(),
     wordHighlights: List<io.github.artcraftandroid.wordcraft.core.PageRect> = emptyList(),
     commentMarks: List<io.github.artcraftandroid.wordcraft.core.PageRect> = emptyList(),
+    activeMark: io.github.artcraftandroid.wordcraft.core.PageRect? = null,
+    activeRange: List<io.github.artcraftandroid.wordcraft.core.PageRect> = emptyList(),
     highlightColor: Color = Color(0x4D4C6EF5),
     dark: Boolean = false,
     findMatches: List<io.github.artcraftandroid.wordcraft.core.PageRect> = emptyList(),
@@ -572,15 +574,34 @@ fun DocumentView(
             for (r in highlights + wordHighlights) {
                 drawRect(highlightColor, topLeft = viewport.onPage(r.page.toInt(), r.x, r.y), size = Size(r.width * viewport.scale, r.height * viewport.scale))
             }
+            // the comment the Comments pane shows: its text tinted (under the letters: screened on a
+            // dark page, multiplied on a white one) between a bar at each end, as the reference marks it
+            if (activeRange.isNotEmpty()) {
+                val tint = if (dark) ACTIVE_COMMENT_DARK else ACTIVE_COMMENT_LIGHT
+                val bar = if (dark) ACTIVE_BAR_DARK else ACTIVE_BAR_LIGHT
+                val blend = if (dark) androidx.compose.ui.graphics.BlendMode.Screen else androidx.compose.ui.graphics.BlendMode.Multiply
+                for (r in activeRange) {
+                    drawRect(tint, topLeft = viewport.onPage(r.page.toInt(), r.x, r.y), size = Size(r.width * viewport.scale, r.height * viewport.scale), blendMode = blend)
+                }
+                val bw = ACTIVE_BAR_WIDTH * viewport.scale
+                activeRange.first().let { r -> drawRect(bar, topLeft = viewport.onPage(r.page.toInt(), r.x, r.y) - Offset(bw, 0f), size = Size(bw, r.height * viewport.scale)) }
+                activeRange.last().let { r -> drawRect(bar, topLeft = viewport.onPage(r.page.toInt(), r.x + r.width, r.y), size = Size(bw, r.height * viewport.scale)) }
+            }
             // Mobile View marks a commented line with a speech bubble in the right margin, as the
-            // reference does
+            // reference does; the shown comment's is filled
             if (mobile) {
                 val bubble = if (dark) Color(0xFFC8C8C8) else Color(0xFF505050)
                 for (m in commentMarks) {
                     val w = info.pages.getOrNull(m.page.toInt())?.width ?: continue
                     // level with the text's middle, above the line's spacing
                     val c = viewport.onPage(m.page.toInt(), w - COMMENT_MARK_INSET, m.y + m.height * 0.32f)
-                    drawCommentMark(c, COMMENT_MARK_SIZE * viewport.scale, bubble)
+                    val active = activeMark != null && m.page == activeMark.page && m.y == activeMark.y
+                    if (active) {
+                        drawCommentMark(c, COMMENT_MARK_SIZE * viewport.scale, if (dark) ACTIVE_MARK_FILL_DARK else ACTIVE_MARK_FILL_LIGHT, fill = true)
+                        drawCommentMark(c, COMMENT_MARK_SIZE * viewport.scale, if (dark) ACTIVE_MARK_EDGE_DARK else ACTIVE_MARK_EDGE_LIGHT)
+                    } else {
+                        drawCommentMark(c, COMMENT_MARK_SIZE * viewport.scale, bubble)
+                    }
                 }
             }
             val pen = ink
@@ -907,8 +928,24 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.panAndZo
 private const val COMMENT_MARK_SIZE = 12f
 private const val COMMENT_MARK_INSET = 5.2f
 
-/** An outline speech bubble `size` across, centred on `c`: a rounded box with a tail at the bottom left. */
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCommentMark(c: Offset, size: Float, color: Color) {
+/**
+ * The comment the Comments pane shows, as the reference marks it: its text tinted purple over the
+ * grey comment shade (screened on the dark page, to #744F7B there; multiplied on a white page,
+ * to #E2BFE8), a bar 1.15 pt wide at each end, and its speech bubble filled. (sRGB values: the
+ * phone shows apps through its Display P3 mode, so a screenshot's numbers are converted first.)
+ */
+private val ACTIVE_COMMENT_DARK = Color(0xFF481851)
+private val ACTIVE_COMMENT_LIGHT = Color(0xFFF8D2FF)
+private val ACTIVE_BAR_DARK = Color(0xFF7E1A73)
+private val ACTIVE_BAR_LIGHT = Color(0xFF7E1A73)
+private const val ACTIVE_BAR_WIDTH = 1.15f
+private val ACTIVE_MARK_FILL_DARK = Color(0xFF602465)
+private val ACTIVE_MARK_EDGE_DARK = Color(0xFFD492D8)
+private val ACTIVE_MARK_FILL_LIGHT = Color(0xFFE3BBE6)
+private val ACTIVE_MARK_EDGE_LIGHT = Color(0xFF922E9B)
+
+/** A speech bubble `size` across, centred on `c`: a rounded box with a tail at the bottom left, outlined or [fill]ed. */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCommentMark(c: Offset, size: Float, color: Color, fill: Boolean = false) {
     val w = size
     val h = size * 0.72f
     val left = c.x - w / 2f
@@ -929,5 +966,5 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCommentMark(c: 
         quadraticTo(left, top, left + r, top)
         close()
     }
-    drawPath(path, color, style = Stroke(width = (size * 0.075f).coerceAtLeast(1f), join = androidx.compose.ui.graphics.StrokeJoin.Round))
+    if (fill) drawPath(path, color) else drawPath(path, color, style = Stroke(width = (size * 0.075f).coerceAtLeast(1f), join = androidx.compose.ui.graphics.StrokeJoin.Round))
 }

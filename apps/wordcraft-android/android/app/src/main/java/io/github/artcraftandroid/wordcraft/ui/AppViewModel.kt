@@ -734,23 +734,63 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The Comments pane shows (in the palette's place). */
     var commentsOpen by mutableStateOf(false)
+        private set
+
+    /** The thread the Comments pane shows (null: the first), and whether a reply or a new comment is being written (the pane then takes the whole screen). */
+    var commentFocus by mutableStateOf<Int?>(null)
+    var commentWriting by mutableStateOf(false)
+
+    /** Open the Comments pane on thread [focus] (or the first); [write] starts a new comment on the selection. */
+    fun openComments(focus: Int? = null, write: Boolean = false) {
+        commentFocus = focus
+        commentWriting = write
+        commentsOpen = true
+        loadComments()
+    }
+
+    fun closeComments() {
+        commentsOpen = false
+        commentWriting = false
+        commentFocus = null
+        activeComment = null
+        commentRange = emptyList()
+    }
+
+    /** The thread the Comments pane shows (marked on the pages: its text and its mark), and its range's rectangles. */
+    var activeComment by mutableStateOf<Int?>(null)
+        private set
+    var commentRange by mutableStateOf<List<io.github.artcraftandroid.wordcraft.core.PageRect>>(emptyList())
+        private set
+
+    /** Mark the thread the Comments pane shows, after it moves to another or the pages change. */
+    fun markActiveComment() = withEngine { e -> readActiveComment(e) }
+
+    private suspend fun readActiveComment(e: Engine) {
+        val id = if (commentsOpen) commentFocus ?: comments.firstOrNull { it.parent == null }?.id else null
+        activeComment = id
+        commentRange = if (id == null || id < 0) emptyList() else e.command { commentRangeRects(id.toUInt()) }
+    }
 
     /** A comment as the pane lists it. */
-    data class CommentItem(val id: Int, val author: String, val date: String, val text: String, val resolved: Boolean, val parent: Int?, val anchor: JSONObject?)
+    data class CommentItem(val id: Int, val author: String, val initials: String, val date: String, val dateUtc: String, val text: String, val resolved: Boolean, val parent: Int?, val anchor: JSONObject?)
 
     var comments by mutableStateOf<List<CommentItem>>(emptyList())
         private set
 
-    fun loadComments() = withEngine { e ->
+    fun loadComments() = withEngine { e -> comments = readComments(e) }
+
+    private suspend fun readComments(e: Engine): List<CommentItem> {
         val out = e.command { runCatching { execute("review.comments", "") }.getOrNull() }
-        comments = runCatching {
+        return runCatching {
             val arr = JSONArray(out ?: "[]")
             (0 until arr.length()).map { i ->
                 val o = arr.getJSONObject(i)
                 CommentItem(
                     id = o.optInt("id"),
                     author = o.optString("author"),
+                    initials = o.optString("initials"),
                     date = o.optString("date"),
+                    dateUtc = if (o.isNull("dateUtc")) "" else o.optString("dateUtc"),
                     text = o.optString("text"),
                     resolved = o.optBoolean("resolved"),
                     parent = if (o.isNull("parent")) null else o.optInt("parent"),
@@ -758,6 +798,36 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 )
             }
         }.getOrDefault(emptyList())
+    }
+
+    /** Post a new comment on the selection, and show its thread. */
+    fun postComment(text: String) = withEngine { e ->
+        val id = e.command { runCatching { JSONObject(execute("review.newComment", JSONObject().put("text", text).toString())).optInt("id", -1) }.getOrDefault(-1) }
+        refresh(e)
+        comments = readComments(e)
+        commentFocus = id.takeIf { it >= 0 && comments.any { c -> c.id == it } }
+        commentWriting = false
+        if (commentFocus == null) closeComments()
+    }
+
+    /** Post a reply to thread [id], and show the thread again. */
+    fun postReply(id: Int, text: String) = withEngine { e ->
+        e.command { runCatching { execute("review.reply", JSONObject().put("id", id).put("text", text).toString()) } }
+        refresh(e)
+        comments = readComments(e)
+        commentFocus = id
+        commentWriting = false
+    }
+
+    /** Delete thread [id] with its replies; the pane goes on to the next thread, or closes after the last. */
+    fun deleteThread(id: Int) = withEngine { e ->
+        val threads = comments.filter { it.parent == null }
+        val at = threads.indexOfFirst { it.id == id }
+        e.command { runCatching { execute("review.deleteComment", JSONObject().put("id", id).toString()) } }
+        refresh(e)
+        comments = readComments(e)
+        val left = comments.filter { it.parent == null }
+        if (left.isEmpty()) closeComments() else commentFocus = left.getOrNull(at.coerceIn(0, left.size - 1))?.id
     }
 
     /** Run a comment command and list the comments again. */
@@ -988,17 +1058,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         refresh(e)
     }
 
-    /** Re-read the pages, the selection, the formatting and the engine's requests after a change. */
-    /** Whether a tap at (`x`, `y`) on `page` is on a comment's mark (its middle 5.2 pt in from the page's right edge, 12 pt across). */
-    private fun onCommentMark(page: Int, x: Float, y: Float): Boolean {
-        val w = info?.pages?.getOrNull(page)?.width ?: return false
-        return commentMarks.any { m -> m.page.toInt() == page && kotlin.math.abs(x - (w - 5.2f)) <= 10f && kotlin.math.abs(y - (m.y + m.height * 0.32f)) <= 10f }
+    /** The thread whose mark a tap at (`x`, `y`) on `page` is on (its middle 5.2 pt in from the page's right edge, 12 pt across), if any. */
+    private fun commentMarkAt(page: Int, x: Float, y: Float): Int? {
+        val w = info?.pages?.getOrNull(page)?.width ?: return null
+        return commentMarks.firstOrNull { m ->
+            val l = m.line
+            l.page.toInt() == page && kotlin.math.abs(x - (w - 5.2f)) <= 10f && kotlin.math.abs(y - (l.y + l.height * 0.32f)) <= 10f
+        }?.id?.toInt()
     }
 
     /** Where each comment thread is anchored (its first line), for the marks beside the text. */
-    var commentMarks by mutableStateOf<List<io.github.artcraftandroid.wordcraft.core.PageRect>>(emptyList())
+    var commentMarks by mutableStateOf<List<io.github.artcraftandroid.wordcraft.core.CommentMark>>(emptyList())
         private set
 
+    /** Re-read the pages, the selection, the formatting and the engine's requests after a change. */
     private suspend fun refresh(e: Engine) {
         val r = e.command { Triple(documentInfo(), selectionView(), formatState()) }
         info = r.first
@@ -1009,6 +1082,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         pageSetup = extra.first
         review = extra.second
         commentMarks = e.command { commentMarks() }
+        if (commentsOpen) readActiveComment(e)
         val events = e.command { takeEvents() }
         events.status?.let { if (it.isNotBlank()) message = it }
         scheduleAutoSave()
@@ -1501,9 +1575,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** A tap on the page: the caret goes there; while editing, the keyboard comes up. */
     fun tap(page: Int, x: Float, y: Float) = withEngine { e ->
-        // a comment's mark beside its line opens the comments, as the reference's does
-        if (viewMode == ViewMode.Mobile && onCommentMark(page, x, y)) {
-            commentsOpen = true
+        // a comment's mark beside its line opens that comment, as the reference's does
+        val mark = if (viewMode == ViewMode.Mobile) commentMarkAt(page, x, y) else null
+        if (mark != null) {
+            openComments(mark)
             return@withEngine
         }
         commitComposing(e)

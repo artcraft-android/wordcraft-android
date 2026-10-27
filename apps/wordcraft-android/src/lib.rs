@@ -124,6 +124,14 @@ pub struct PageRect {
     pub height: f32,
 }
 
+/// A comment thread's mark beside its line in Mobile View: the thread, and the line its
+/// anchor starts on (page, x, top, height; no width).
+#[derive(Debug, Clone, Copy, PartialEq, uniffi::Record)]
+pub struct CommentMark {
+    pub id: u32,
+    pub line: PageRect,
+}
+
 /// Find's state for its bar and the pages: how many matches there are, which one is selected
 /// (0-based), and where they are (the selected one apart), at most [`MAX_FIND_DRAWN`] drawn.
 #[derive(Debug, Clone, uniffi::Record)]
@@ -1429,12 +1437,12 @@ impl MobileSession {
     /// Where each comment thread is anchored in the body: the line its anchor starts on (page,
     /// x, top, height), for the marks Mobile View shows beside commented lines. Replies, and
     /// comments whose anchor is gone, have none.
-    pub fn comment_marks(&self) -> Vec<PageRect> {
+    pub fn comment_marks(&self) -> Vec<CommentMark> {
         let mut s = self.lock();
-        let anchors: Vec<Pos> = wordcraft_engine::cmd::review::comment_list(&s)
+        let anchors: Vec<(u32, Pos)> = wordcraft_engine::cmd::review::comment_list(&s)
             .into_iter()
             .filter(|(id, _)| s.doc.comments.get(id).is_some_and(|c| c.parent.is_none()))
-            .filter_map(|(_, pos)| pos)
+            .filter_map(|(id, pos)| Some((id, pos?)))
             .collect();
         if anchors.is_empty() {
             return Vec::new();
@@ -1442,8 +1450,23 @@ impl MobileSession {
         let layout = s.layout();
         anchors
             .iter()
-            .filter_map(|p| layout.caret(p))
-            .map(|c| PageRect { page: page_index(c.page), x: c.x, y: c.top, width: 0.0, height: c.height })
+            .filter_map(|(id, p)| {
+                let c = layout.caret(p)?;
+                Some(CommentMark { id: *id, line: PageRect { page: page_index(c.page), x: c.x, y: c.top, width: 0.0, height: c.height } })
+            })
+            .collect()
+    }
+
+    /// The rectangles comment `id`'s range takes on the pages, for the selected comment's mark
+    /// over its text; none when its range is gone.
+    pub fn comment_range_rects(&self, id: u32) -> Vec<PageRect> {
+        let mut s = self.lock();
+        let Some((a, b)) = wordcraft_engine::cmd::review::comment_range(&s, id) else { return Vec::new() };
+        let layout = s.layout();
+        layout
+            .selection_rects(&s.doc, &a, &b, s.page_hint)
+            .into_iter()
+            .map(|(page, r)| PageRect { page: page_index(page), x: r.x, y: r.y, width: r.w, height: r.h })
             .collect()
     }
 

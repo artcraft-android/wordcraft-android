@@ -124,6 +124,8 @@ fun EditorScreen(vm: AppViewModel) {
             vm.linkPane -> vm.linkPane = false
             vm.linkEdit != null -> vm.linkEdit = null
             vm.commentPane -> vm.commentPane = false
+            vm.commentsOpen && vm.commentWriting && vm.commentFocus != null -> vm.commentWriting = false
+            vm.commentsOpen -> vm.closeComments()
             vm.headingsOpen -> vm.headingsOpen = false
             vm.checkSettings -> vm.checkSettings = false
             vm.checkOpen -> vm.checkOpen = false
@@ -138,6 +140,9 @@ fun EditorScreen(vm: AppViewModel) {
             else -> vm.close()
         }
     }
+
+    // the thread the Comments pane shows is marked on the pages
+    LaunchedEffect(vm.commentsOpen, vm.commentFocus, vm.comments) { if (vm.commentsOpen) vm.markActiveComment() }
 
     // where the reader is, kept for the next time the document opens (once the view rests)
     LaunchedEffect(viewport) {
@@ -259,17 +264,20 @@ fun EditorScreen(vm: AppViewModel) {
 
     val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
     val title = titleOf(vm.document?.name.orEmpty())
-    Box(Modifier.fillMaxSize().background(WordColors.StatusBand)) {
+    // writing a comment, the light Comments pane takes the whole screen, the bars round it too
+    val commentScreen = vm.commentsOpen && vm.commentWriting
+    Box(Modifier.fillMaxSize().background(if (commentScreen) COMMENTS_GROUND else WordColors.StatusBand)) {
         BoxWithConstraints(
             Modifier.fillMaxSize().statusBarsPadding()
                 .windowInsetsPadding(WindowInsets.displayCutout.only(androidx.compose.foundation.layout.WindowInsetsSides.Horizontal))
-                .background(WordColors.Surface).navigationBarsPadding().imePadding(),
+                .background(if (commentScreen) COMMENTS_GROUND else WordColors.Surface).navigationBarsPadding().imePadding(),
         ) {
             // the palette takes up to two fifths of the height (all of its 419 dp in portrait)
             val paletteHeight = min(PALETTE_HEIGHT, maxHeight * 0.4f)
             val landscape = maxWidth > maxHeight
             Column(Modifier.fillMaxSize()) {
-                if (!vm.editing && !vm.findSettingsOpen) {
+                // the Comments pane hides the bar, as the reference's does
+                if (!vm.editing && !vm.findSettingsOpen && !vm.commentsOpen) {
                     ViewTopBar(
                         title = title,
                         onClose = vm::close,
@@ -319,7 +327,9 @@ fun EditorScreen(vm: AppViewModel) {
                         },
                         highlights = vm.readingRects,
                         wordHighlights = vm.readingWord,
-                        commentMarks = if (vm.review?.showMarkup != false) vm.commentMarks else emptyList(),
+                        commentMarks = if (vm.review?.showMarkup != false) vm.commentMarks.map { it.line } else emptyList(),
+                        activeMark = vm.commentMarks.firstOrNull { it.id.toInt() == vm.activeComment }?.line,
+                        activeRange = vm.commentRange,
                         modifier = Modifier.fillMaxSize(),
                         ink = if (vm.editing && vm.inkOn) {
                             val hl = vm.inkTool == "highlighter"
@@ -375,7 +385,7 @@ fun EditorScreen(vm: AppViewModel) {
                             onPaste = vm::paste,
                             onComment = {
                                 vm.contextBar = false
-                                vm.commentsOpen = true
+                                vm.openComments(write = true)
                             },
                             // centred over the selection, kept inside the view; under it when there's no room above
                             modifier = Modifier.layout { measurable, constraints ->
@@ -434,7 +444,7 @@ fun EditorScreen(vm: AppViewModel) {
                             mobileView = mobile,
                             onToggleView = vm::toggleMobileView,
                             onReadAloud = vm::startReadAloud,
-                            onComments = { vm.commentsOpen = true },
+                            onComments = { vm.openComments() },
                             onShare = vm::save,
                             modifier = if (landscape) Modifier.align(Alignment.BottomStart).padding(start = 30.dp, bottom = 12.dp) else Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
                         )
@@ -459,7 +469,7 @@ fun EditorScreen(vm: AppViewModel) {
                                 onTable = { vm.openInsert("table") },
                                 onLink = { vm.linkPane = true },
                                 onShapes = { vm.openInsert("shapes") },
-                                onComment = { vm.commentsOpen = true },
+                                onComment = { vm.openComments(write = true) },
                                 onMore = { vm.openInsert() },
                             )
                         } else {
@@ -472,7 +482,7 @@ fun EditorScreen(vm: AppViewModel) {
                                 onCommand = { vm.command(it) },
                                 onHighlight = { vm.openPalette("highlight") },
                                 onFontColor = { vm.openPalette("fontColor") },
-                                onComment = { vm.commentsOpen = true },
+                                onComment = { vm.openComments(write = true) },
                                 onLink = { vm.linkPane = true },
                                 onPicture = { vm.pictureRequests.trySend("pick") },
                                 onTable = { vm.openInsert("table") },
@@ -488,7 +498,7 @@ fun EditorScreen(vm: AppViewModel) {
                 if (vm.reading) {
                     if (vm.audioSettingsOpen) AudioSettingsSheet(vm)
                     ReadAloudBar(vm)
-                } else if (vm.commentsOpen) {
+                } else if (vm.commentsOpen && !vm.commentWriting) {
                     CommentsSheet(vm, Modifier.fillMaxWidth().height(paletteHeight))
                 } else if (vm.headingsOpen) {
                     HeadingsSheet(vm, Modifier.fillMaxWidth().height(paletteHeight))
@@ -500,6 +510,8 @@ fun EditorScreen(vm: AppViewModel) {
                     PaletteSheet(vm, onFind = vm::openFind, modifier = Modifier.fillMaxWidth().height(paletteHeight))
                 }
             }
+            // writing a reply or a new comment: the Comments pane over everything, above the keyboard
+            if (commentScreen) CommentsSheet(vm, Modifier.fillMaxSize())
             // the palette's tab list, over the pages and the palette, centred on the palette's
             // header; it grows out of its middle as it fades in
             val tabCount = PALETTE_TABS.size + (if (contextTab(vm.format) != null) 1 else 0)

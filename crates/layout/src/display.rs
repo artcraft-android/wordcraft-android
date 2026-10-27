@@ -785,20 +785,21 @@ fn lines(
             && opts.revisions.comments
             && let Some(p) = para
         {
-            let mut open: Option<usize> = None;
+            // each comment from its own start to its own end (a comment and its replies share
+            // a range); one begun in an earlier paragraph from this one's start
+            let mut open: Vec<(u32, usize)> = Vec::new();
             let mut ranges = Vec::new();
             for off in p.object_offsets() {
                 match p.object_at(off) {
-                    Some(InlineObject::CommentStart { .. }) => open = open.or(Some(off)),
-                    Some(InlineObject::CommentEnd { .. }) => {
-                        ranges.push((open.take().unwrap_or(0), off));
+                    Some(InlineObject::CommentStart { id }) => open.push((*id, off)),
+                    Some(InlineObject::CommentEnd { id }) => {
+                        let start = open.iter().position(|(x, _)| x == id).map(|i| open.remove(i).1).unwrap_or(0);
+                        ranges.push((start, off));
                     }
                     _ => {}
                 }
             }
-            if let Some(o) = open {
-                ranges.push((o, p.len()));
-            }
+            ranges.extend(open.into_iter().map(|(_, o)| (o, p.len())));
             for (a, b) in ranges {
                 if b <= line.start || a >= line.stop {
                     continue;
