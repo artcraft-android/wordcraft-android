@@ -666,8 +666,9 @@ fn change_bars(doc: &Document, page: &Page, m: &MarkupOptions, alpha: f32, outer
         }
     }
     bars.extend(bar);
+    // 1.25 pt wide: the phone app's bar is 6 px at 100% on its pages and 4 px in Mobile View
     for (y0, y1) in bars {
-        out.push(Draw::Line { x0: bx, y0, x1: bx, y1, width: 0.75, color, stroke: Stroke::Solid, alpha, text_bg: None });
+        out.push(Draw::Line { x0: bx, y0, x1: bx, y1, width: 1.25, color, stroke: Stroke::Solid, alpha, text_bg: None });
     }
 }
 
