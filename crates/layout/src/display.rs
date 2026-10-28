@@ -191,6 +191,9 @@ pub struct DisplayOptions {
     /// Points of margin the screen shows beyond each side of the page (Mobile View's pad on a
     /// phone): change bars go in the middle of the margin as seen, page margin and pad together.
     pub outer_margin: f32,
+    /// The reviewers in the order their colours go ([`reviewer_order`]); `page_display` works it
+    /// out when it is `None` and the document has more than one reviewer.
+    pub reviewers: Option<std::sync::Arc<Vec<String>>>,
 }
 
 impl Default for DisplayOptions {
@@ -207,6 +210,7 @@ impl Default for DisplayOptions {
             revisions: MarkupOptions::default(),
             ground: None,
             outer_margin: 0.0,
+            reviewers: None,
         }
     }
 }
@@ -353,8 +357,9 @@ pub const MOVE_COLOR: Rgb = Rgb(0x1A, 0x7F, 0x37);
 
 /// Colour for revisions by author index.
 pub fn revision_color(i: u32) -> Rgb {
+    // the first two as the phone app draws them (measured, turned from Display P3 into sRGB)
     const C: [Rgb; 6] =
-        [Rgb(0xA8, 0x28, 0x40), Rgb(0x1E, 0x6E, 0xB0), Rgb(0x2E, 0x8B, 0x3E), Rgb(0xC0, 0x5A, 0x10), Rgb(0x70, 0x3C, 0xB0), Rgb(0x0E, 0x7C, 0x86)];
+        [Rgb(0xB5, 0x08, 0x2E), Rgb(0x2F, 0x97, 0xD3), Rgb(0x2E, 0x8B, 0x3E), Rgb(0xC0, 0x5A, 0x10), Rgb(0x70, 0x3C, 0xB0), Rgb(0x0E, 0x7C, 0x86)];
     C.get(i as usize % C.len()).copied().unwrap_or(C[0])
 }
 
@@ -370,6 +375,14 @@ fn stroke_of(u: Underline) -> Stroke {
 
 /// Draw items for a page.
 pub fn page_display(doc: &Document, page: &Page, opts: &DisplayOptions) -> Vec<Draw> {
+    // the reviewers' order, once for the page, when more than one could take a colour
+    let ordered;
+    let opts = if opts.reviewers.is_none() && reviewer_count(doc) > 1 {
+        ordered = DisplayOptions { reviewers: Some(std::sync::Arc::new(reviewer_order(doc))), ..opts.clone() };
+        &ordered
+    } else {
+        opts
+    };
     let mut out = Vec::new();
     let ha = if opts.dim_header { 0.45 } else { 1.0 };
     let ba = if opts.dim_body { 0.45 } else { 1.0 };
@@ -1001,7 +1014,7 @@ fn lines(
             let shown = opts.markup && m.insertions_deletions;
             let del = rc.del.filter(|_| shown);
             let ins = rc.ins.filter(|_| shown && del.is_none());
-            let author = |r: u32| revision_color(doc.revisions.get(r as usize).map(|v| author_index(doc, &v.author)).unwrap_or(0));
+            let author = |r: u32| revision_color(doc.revisions.get(r as usize).map(|v| author_index(doc, opts, &v.author)).unwrap_or(0));
             // Moved text: green, double strikethrough where it was, double underline where it went.
             let moved_to = doc.move_name(ins).is_some();
             let moved_from = del.is_some() && doc.move_name(del).is_some();
@@ -1296,18 +1309,17 @@ fn lines(
                 let mx = if line.rtl { ex - 1.0 - size * 0.6 } else { ex + 1.0 };
                 // A tracked (inserted or deleted) paragraph mark is drawn in its author's colour.
                 let m = &opts.revisions;
-                let color = para.filter(|_| opts.markup && m.insertions_deletions).and_then(|p| match (p.mark.ins, p.mark.del) {
-                    (ins, del) if doc.move_name(del).is_some() || (del.is_none() && doc.move_name(ins).is_some()) => Some(MOVE_COLOR),
-                    (_, Some(r)) => Some(
-                        m.delete_color
-                            .unwrap_or_else(|| revision_color(doc.revisions.get(r as usize).map(|v| author_index(doc, &v.author)).unwrap_or(0))),
-                    ),
-                    (Some(r), None) => Some(
-                        m.insert_color
-                            .unwrap_or_else(|| revision_color(doc.revisions.get(r as usize).map(|v| author_index(doc, &v.author)).unwrap_or(0))),
-                    ),
-                    _ => None,
-                });
+                let color =
+                    para.filter(|_| opts.markup && m.insertions_deletions).and_then(|p| match (p.mark.ins, p.mark.del) {
+                        (ins, del) if doc.move_name(del).is_some() || (del.is_none() && doc.move_name(ins).is_some()) => Some(MOVE_COLOR),
+                        (_, Some(r)) => Some(m.delete_color.unwrap_or_else(|| {
+                            revision_color(doc.revisions.get(r as usize).map(|v| author_index(doc, opts, &v.author)).unwrap_or(0))
+                        })),
+                        (Some(r), None) => Some(m.insert_color.unwrap_or_else(|| {
+                            revision_color(doc.revisions.get(r as usize).map(|v| author_index(doc, opts, &v.author)).unwrap_or(0))
+                        })),
+                        _ => None,
+                    });
                 // The last paragraph of a section ends in a section break instead of a plain ¶.
                 if let Some(start) = section_break_after(doc, story, path) {
                     let (x0, x1) = if line.rtl { (x + line.left, ex - 2.0) } else { (ex + 2.0, x + line.right) };
@@ -2120,7 +2132,10 @@ fn text_glyphs(doc: &Document, r: Rect, it: &GraphicItem, alpha: f32, k: f32) ->
     })
 }
 
-fn author_index(doc: &Document, author: &str) -> u32 {
+fn author_index(doc: &Document, opts: &DisplayOptions, author: &str) -> u32 {
+    if let Some(order) = &opts.reviewers {
+        return order.iter().position(|a| a == author).unwrap_or(0) as u32;
+    }
     let mut seen: Vec<&str> = Vec::new();
     for r in &doc.revisions {
         if !seen.contains(&r.author.as_str()) {
@@ -2128,6 +2143,68 @@ fn author_index(doc: &Document, author: &str) -> u32 {
         }
     }
     seen.iter().position(|a| *a == author).unwrap_or(0) as u32
+}
+
+/// How many people have changes or comments in the document.
+fn reviewer_count(doc: &Document) -> usize {
+    let mut seen: Vec<&str> = Vec::new();
+    for a in doc.revisions.iter().map(|r| r.author.as_str()).chain(doc.comments.values().map(|c| c.author.as_str())) {
+        if !seen.contains(&a) {
+            seen.push(a);
+        }
+    }
+    seen.len()
+}
+
+/// The reviewers in the order the phone app gives out their colours: by where each first
+/// appears in the body, with a change of theirs or the start of a comment of theirs, then the
+/// rest (changes and comments elsewhere) in the order the document lists them.
+pub fn reviewer_order(doc: &Document) -> Vec<String> {
+    fn note(seen: &mut Vec<String>, a: &str) {
+        if !seen.iter().any(|s| s == a) {
+            seen.push(a.to_string());
+        }
+    }
+    let mut seen = Vec::new();
+    let changed = |r: Option<u32>| r.and_then(|r| doc.revisions.get(r as usize)).map(|v| v.author.as_str());
+    let commented = |p: &wordcraft_doc::Paragraph, o: usize| match p.object_at(o) {
+        Some(InlineObject::CommentStart { id }) => doc.comments.get(id).map(|c| c.author.as_str()),
+        _ => None,
+    };
+    for path in doc.para_paths(StoryRef::Body) {
+        let Some(p) = doc.para(StoryRef::Body, &path) else { continue };
+        let objects = p.object_offsets();
+        let mut next = objects.iter().copied().peekable();
+        let mut off = 0usize;
+        for run in &p.runs {
+            let end = off.saturating_add(run.len);
+            // a comment starting in the run counts before the run's own change
+            while let Some(o) = next.next_if(|o| *o < end) {
+                if let Some(a) = commented(p, o) {
+                    note(&mut seen, a);
+                }
+            }
+            for a in [changed(run.props.ins), changed(run.props.del)].into_iter().flatten() {
+                note(&mut seen, a);
+            }
+            off = end;
+        }
+        for o in next {
+            if let Some(a) = commented(p, o) {
+                note(&mut seen, a);
+            }
+        }
+        for a in [changed(p.mark.ins), changed(p.mark.del)].into_iter().flatten() {
+            note(&mut seen, a);
+        }
+    }
+    for r in &doc.revisions {
+        note(&mut seen, &r.author);
+    }
+    for c in doc.comments.values() {
+        note(&mut seen, &c.author);
+    }
+    seen
 }
 
 /// Automatic colour is black, or white on a dark background.

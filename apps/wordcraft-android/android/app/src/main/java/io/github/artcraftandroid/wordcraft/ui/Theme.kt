@@ -93,12 +93,16 @@ object WordColors {
     val FindBar get() = pick(0xFFE6E6E6, 0xFF303030)
     val FindField get() = pick(0xFFFFFFFF, 0xFF212121)
     val FindHint get() = pick(0xFF8A8A8A, 0xFFACACAC)
-    val MatchCurrent get() = pick(0xFFC7BA64, 0xFF867836)
+    // dark: screened over the page to the reference's olives (measured, converted from P3)
+    val MatchCurrent get() = pick(0xFFC7BA64, 0xFF7C6E26)
 
-    /** Mobile View's message card over the pages, and its text (the dark one measured on the reference). */
-    val MessageCard get() = pick(0xFFDCE5F7, 0xFF244185)
-    val OnMessageCard get() = pick(0xFF1F3B78, 0xFF8AAAEB)
-    val MatchOther get() = pick(0xFFFFEE80, 0xFF4D4A2A)
+    /**
+     * Mobile View's message card over the pages, and its text (the dark one measured on the
+     * reference; screenshots there read in Display P3, so the measured values are converted to sRGB).
+     */
+    val MessageCard get() = pick(0xFFDCE5F7, 0xFF19428A)
+    val OnMessageCard get() = pick(0xFF1F3B78, 0xFF81ABF1)
+    val MatchOther get() = pick(0xFFFFEE80, 0xFF5A4500)
 
     /** Find settings: an unticked box, its edge, and the line under Replace. */
     val CheckOff get() = pick(0xFFFFFFFF, 0xFF6E6E6E)
@@ -110,8 +114,8 @@ object WordColors {
     val CountsBoxEdge get() = pick(0xFFD2D2D2, 0xFF666666)
     val CountsRule = Color(0xFFBDBDBD)
 
-    /** Language's chosen language: grey in light, the reference's blue in dark. */
-    val ListChosen get() = pick(0xFFD2D2D2, 0xFF4D7BE1)
+    /** Language's chosen language: grey in light, the reference's blue in dark (measured, converted from P3). */
+    val ListChosen get() = pick(0xFFD2D2D2, 0xFF3D7CE8)
 
     /** Over the pages behind a bottom sheet. */
     val Scrim = Color(0x52000000)

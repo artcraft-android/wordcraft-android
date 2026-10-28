@@ -1096,6 +1096,29 @@ mod tests {
         d.iter().filter_map(|x| if let Draw::Line { x0, y0, x1, y1, .. } = x { Some((*x0, *y0, *x1, *y1)) } else { None }).collect()
     }
 
+    /// Reviewers' colours go by where each first appears in the document, a comment counting
+    /// as much as a change: another's comment before the changes makes their author the second
+    /// colour, after them the first, as the phone app colours them.
+    #[test]
+    fn reviewer_colours_follow_the_document_comments_included() {
+        let inserted = |comment_first: bool| {
+            let mut s = Session::new(Document::new());
+            s.view.proofing = false;
+            s.run("document.setText", &json!({"text": "one two three"})).unwrap();
+            s.author = "Zed Moss".into();
+            s.run("select.text", &json!({"text": if comment_first { "one" } else { "three" }})).unwrap();
+            s.run("review.newComment", &json!({"text": "note"})).unwrap();
+            s.author = "Test Writer".into();
+            s.run("review.trackChanges", &json!({"value": true})).unwrap();
+            s.run("select.text", &json!({"text": "two"})).unwrap();
+            s.run("text.insert", &json!({"text": "TWO"})).unwrap();
+            let (d, _) = draws(&mut s);
+            glyph_colors(&d).into_iter().map(|(c, _)| c).find(|c| *c != wordcraft_doc::Rgb::BLACK)
+        };
+        assert_eq!(inserted(true), Some(wordcraft_layout::display::revision_color(1)), "after another's comment: the second colour");
+        assert_eq!(inserted(false), Some(wordcraft_layout::display::revision_color(0)), "before it: the first");
+    }
+
     /// A comment and its reply share a range: the shade covers the commented words only, not
     /// the paragraph before them.
     #[test]

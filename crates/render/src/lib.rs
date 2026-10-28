@@ -460,11 +460,12 @@ impl RenderOptions {
 /// reference's greys.
 const DARK_L_TOP: f32 = 0.973;
 const DARK_L_SPAN: f32 = 0.693;
-const DARK_L_POW: f32 = 1.68;
+const DARK_L_POW: f32 = 1.76;
 /// How a colour's chroma follows its change in lightness (`(L / L')^DARK_CHROMA_FOLLOW`), and the
-/// share of it kept: the reference's colours come out a little greyer than they went in.
+/// share of it kept. (Fitted to the reference's colours read off screenshots and turned from the
+/// phone's Display P3 back into sRGB: read as they were, they had looked greyer than they are.)
 const DARK_CHROMA_FOLLOW: f32 = 0.4;
-const DARK_CHROMA_KEPT: f32 = 0.8;
+const DARK_CHROMA_KEPT: f32 = 1.0;
 
 /// A document colour as a dark page shows it, the way the reference turns colours (fitted to its
 /// greys, then checked on a set of hues: within a few levels for greys and pale colours, about
@@ -1608,14 +1609,16 @@ mod tests {
         for (v, want) in [(0x33, 212), (0x66, 176), (0x99, 136), (0xCC, 91), (0xF2, 52), (0xFE, 39)] {
             near(Rgb(v, v, v), (want, want, want), 8);
         }
+        // the reference's colours in sRGB (its screenshots read in Display P3, converted)
         for (c, want) in [
-            (Rgb(0x44, 0x72, 0xC4), (135, 164, 243)),
-            (Rgb(0x1F, 0x38, 0x64), (195, 208, 248)),
-            (Rgb(0xD9, 0xE2, 0xF3), (61, 70, 87)),
-            (Rgb(0xFF, 0, 0), (235, 90, 83)),
-            (Rgb(0x70, 0x30, 0xA0), (214, 171, 249)),
-            (Rgb(0x37, 0x56, 0x23), (182, 200, 169)),
-            (Rgb(0xFF, 0xFF, 0), (81, 81, 21)),
+            (Rgb(0x44, 0x72, 0xC4), (0x7F, 0xA5, 0xF9)),
+            (Rgb(0x1F, 0x38, 0x64), (0xC0, 0xD1, 0xFC)),
+            (Rgb(0xD9, 0xE2, 0xF3), (0x3B, 0x46, 0x59)),
+            (Rgb(0xFF, 0, 0), (0xFE, 0x4C, 0x4B)),
+            (Rgb(0x70, 0x30, 0xA0), (0xDE, 0xA9, 0xFE)),
+            (Rgb(0x37, 0x56, 0x23), (0xB2, 0xC9, 0xA6)),
+            // yellow comes out darker than the reference's (its lightness, not its chroma)
+            (Rgb(0xFF, 0xFF, 0), (0x51, 0x51, 0x00)),
         ] {
             near(c, want, 30);
         }
