@@ -49,6 +49,8 @@ object WordColors {
 
     /** Bottom sheets (the header's overflow). */
     val Sheet get() = pick(0xFFFFFFFF, 0xFF1F1F1F)
+    /** The grip at the top of a sheet (the dark one measured on the reference). */
+    val SheetGrip get() = pick(0xFFD2D2D2, 0xFF4D4D4D)
 
     /** The floating toolbar's icons, and the circle behind a button that is on. */
     val OnPill get() = pick(0xFF242424, 0xFFFFFFFF)

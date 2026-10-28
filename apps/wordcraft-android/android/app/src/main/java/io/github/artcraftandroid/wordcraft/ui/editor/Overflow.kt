@@ -64,8 +64,9 @@ fun OverflowSheet(vm: AppViewModel, visible: Boolean, onSaveAs: () -> Unit, modi
                     .navigationBarsPadding()
                     .verticalScroll(rememberScrollState()),
             ) {
-                Box(Modifier.fillMaxWidth().height(33.dp), contentAlignment = Alignment.Center) {
-                    Box(Modifier.size(32.dp, 4.dp).clip(RoundedCornerShape(2.dp)).background(WordColors.Pressed))
+                // the grip 7.8 dp under the sheet's edge, the rows 19.5 dp under it, as the reference's
+                Box(Modifier.fillMaxWidth().height(19.5.dp), contentAlignment = Alignment.TopCenter) {
+                    Box(Modifier.padding(top = 7.8.dp).size(36.dp, 4.dp).clip(RoundedCornerShape(2.dp)).background(WordColors.SheetGrip))
                 }
                 val editing = vm.editing
                 // drawing is on the pages only, not in Mobile View
