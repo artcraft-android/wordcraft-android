@@ -435,6 +435,19 @@ fn find_view_marks_every_match_and_the_selected_one() {
     assert!(m.find_again("not json".into()).is_err());
 }
 
+/// A match is marked over its text, its line's spacing extra left under it; the selected one
+/// also gives its whole lines (the selection showing under the text), as the phone app marks them.
+#[test]
+fn find_marks_a_matchs_text_and_its_lines() {
+    let m = MobileSession::default();
+    m.execute("text.insert".into(), json!({ "text": "one cat two" }).to_string()).unwrap();
+    m.execute("para.lineSpacing".into(), json!({ "value": 2.0 }).to_string()).unwrap();
+    m.execute("caret.docStart".into(), "{}".into()).unwrap();
+    let v = m.find_again(json!({ "text": "cat" }).to_string()).unwrap();
+    let (text, line) = (v.current_rects[0], v.current_lines[0]);
+    assert!((line.height - 2.0 * text.height).abs() < 0.01 && line.y == text.y, "{text:?} {line:?}");
+}
+
 #[test]
 fn theme_fonts_are_the_headings_then_the_body_font() {
     let m = MobileSession::default();

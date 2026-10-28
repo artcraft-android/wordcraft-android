@@ -344,6 +344,7 @@ fun EditorScreen(vm: AppViewModel) {
                         dark = vm.pagesDark,
                         findMatches = find?.matches.orEmpty(),
                         findCurrent = find?.currentRects.orEmpty(),
+                        findCurrentLines = find?.currentLines.orEmpty(),
                         objectHandles = vm.editing && !vm.inkOn && vm.format?.`object` != null,
                         objectMovable = vm.format?.objectInline == false,
                         keepRatio = vm.format?.`object` == "picture",

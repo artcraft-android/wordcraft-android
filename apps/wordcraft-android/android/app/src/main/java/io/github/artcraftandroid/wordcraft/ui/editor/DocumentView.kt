@@ -380,6 +380,7 @@ fun DocumentView(
     dark: Boolean = false,
     findMatches: List<io.github.artcraftandroid.wordcraft.core.PageRect> = emptyList(),
     findCurrent: List<io.github.artcraftandroid.wordcraft.core.PageRect> = emptyList(),
+    findCurrentLines: List<io.github.artcraftandroid.wordcraft.core.PageRect> = emptyList(),
     objectHandles: Boolean = false,
     objectMovable: Boolean = false,
     keepRatio: Boolean = false,
@@ -567,6 +568,18 @@ fun DocumentView(
             }
             // Find's matches, under the text: multiplied on a white page, screened on a dark one
             val blend = if (dark) androidx.compose.ui.graphics.BlendMode.Screen else androidx.compose.ui.graphics.BlendMode.Multiply
+            // the selected match's lines under its text: the selection showing, as the reference's does
+            for ((line, t) in findCurrentLines.zip(findCurrent)) {
+                val gap = line.y + line.height - (t.y + t.height)
+                if (gap > 0.05f) {
+                    drawRect(
+                        io.github.artcraftandroid.wordcraft.ui.WordColors.MatchSelected,
+                        topLeft = viewport.onPage(line.page.toInt(), line.x, t.y + t.height),
+                        size = Size(line.width * viewport.scale, gap * viewport.scale),
+                        blendMode = blend,
+                    )
+                }
+            }
             for ((rects, color) in listOf(findMatches to io.github.artcraftandroid.wordcraft.ui.WordColors.MatchOther, findCurrent to io.github.artcraftandroid.wordcraft.ui.WordColors.MatchCurrent)) {
                 for (r in rects) {
                     drawRect(color, topLeft = viewport.onPage(r.page.toInt(), r.x, r.y), size = Size(r.width * viewport.scale, r.height * viewport.scale), blendMode = blend)

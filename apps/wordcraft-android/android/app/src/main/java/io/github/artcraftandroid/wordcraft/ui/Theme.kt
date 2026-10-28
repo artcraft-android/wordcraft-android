@@ -104,6 +104,9 @@ object WordColors {
     val OnMessageCard get() = pick(0xFF1F3B78, 0xFF81ABF1)
     val MatchOther get() = pick(0xFFFFEE80, 0xFF5A4500)
 
+    /** Under the selected match's text, to its line's foot: the selection's grey (screened on a dark page to #474747). */
+    val MatchSelected get() = pick(0xFFC6C6C6, 0xFF373737)
+
     /** Find settings: an unticked box, its edge, and the line under Replace. */
     val CheckOff get() = pick(0xFFFFFFFF, 0xFF6E6E6E)
     val CheckEdge get() = pick(0xFF8A8A8A, 0xFF666666)
