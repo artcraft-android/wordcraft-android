@@ -34,6 +34,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.artcraftandroid.wordcraft.ui.AppViewModel
@@ -65,7 +70,7 @@ fun OverflowSheet(vm: AppViewModel, visible: Boolean, onSaveAs: () -> Unit, modi
                     .verticalScroll(rememberScrollState()),
             ) {
                 // the grip 7.8 dp under the sheet's edge, the rows 19.5 dp under it, as the reference's
-                Box(Modifier.fillMaxWidth().height(19.5.dp), contentAlignment = Alignment.TopCenter) {
+                Box(Modifier.fillMaxWidth().height(19.5.dp).semantics { contentDescription = "Drag handle" }, contentAlignment = Alignment.TopCenter) {
                     Box(Modifier.padding(top = 7.8.dp).size(36.dp, 4.dp).clip(RoundedCornerShape(2.dp)).background(WordColors.SheetGrip))
                 }
                 val editing = vm.editing
@@ -138,7 +143,13 @@ fun OverflowSheet(vm: AppViewModel, visible: Boolean, onSaveAs: () -> Unit, modi
 private fun OverflowRow(label: String, glyph: Glyph, enabled: Boolean = true, on: Boolean = false, switch: Boolean? = null, onClick: () -> Unit) {
     val tint = if (enabled) WordColors.Accent else WordColors.Disabled
     Row(
-        Modifier.fillMaxWidth().height(48.dp).background(if (on) WordColors.Divider else Color.Transparent).clickable(enabled = enabled, onClick = onClick),
+        Modifier.fillMaxWidth().height(48.dp).background(if (on) WordColors.Divider else Color.Transparent).clickable(enabled = enabled, onClick = onClick)
+            // the whole row is the item for a screen reader, as the reference's rows are
+            .clearAndSetSemantics {
+                contentDescription = label
+                if (switch != null) stateDescription = if (switch) "On" else "Off"
+                if (!enabled) disabled()
+            },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Spacer(Modifier.width(20.dp))
