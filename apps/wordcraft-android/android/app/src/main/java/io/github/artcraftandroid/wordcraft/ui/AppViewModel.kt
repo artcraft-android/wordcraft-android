@@ -538,6 +538,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit().putBoolean("startMobileView", on).apply()
     }
 
+    /** Display for Review: kept for every document from now on, as the reference keeps it. */
+    fun chooseMarkupView(view: String) {
+        prefs.edit().putString("markupView", view).apply()
+        command("review.markup", JSONObject().put("value", view).toString())
+    }
+
     /** The Headings pane offers lines that look like headings in a document without heading styles. */
     var autoHeadings by mutableStateOf(prefs.getBoolean("autoHeadings", true))
         private set
@@ -1141,6 +1147,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         panels = emptyList()
         viewMode = if (edit || !startInMobileView) ViewMode.Print else ViewMode.Mobile
         if (viewMode == ViewMode.Mobile && mobileWidth > 0f) e.command { setView("mobile", mobileWidth) } else e.command { setView("print", 0f) }
+        // the Display for Review chosen last, for this document too
+        prefs.getString("markupView", null)?.takeIf { it != "allMarkup" }?.let { v ->
+            e.command { runCatching { execute("review.markup", JSONObject().put("value", v).toString()) } }
+        }
         colors = e.command { colorChoices() }
         themeFonts = e.command { themeFonts() }
         // the drawings message shows for each document with drawings Mobile View moves, until

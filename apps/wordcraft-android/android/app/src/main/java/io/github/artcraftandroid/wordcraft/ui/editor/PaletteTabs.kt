@@ -699,7 +699,7 @@ private fun DisplayForReviewPanel(vm: AppViewModel) {
     val current = vm.review?.markup ?: "allMarkup"
     Scrolling {
         for ((id, label) in MARKUP_VIEWS) {
-            ChoiceRow(label, id == current, onClick = { vm.command("review.markup", json("value" to id)) }, indent = 16.dp, size = 16)
+            ChoiceRow(label, id == current, onClick = { vm.chooseMarkupView(id) }, indent = 16.dp, size = 16)
         }
     }
 }
