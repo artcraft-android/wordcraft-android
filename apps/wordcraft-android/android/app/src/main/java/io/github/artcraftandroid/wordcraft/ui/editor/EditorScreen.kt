@@ -327,7 +327,9 @@ fun EditorScreen(vm: AppViewModel) {
                         },
                         highlights = vm.readingRects,
                         wordHighlights = vm.readingWord,
-                        commentMarks = if (vm.review?.showMarkup != false) vm.commentMarks.map { it.line } else emptyList(),
+                        // comment marks show with markup and in Simple Markup, as the reference's do
+                        commentMarks = if (vm.review?.showMarkup != false || vm.review?.markup == "simpleMarkup") vm.commentMarks.map { it.line } else emptyList(),
+                        look = vm.review?.markup,
                         activeMark = vm.commentMarks.firstOrNull { it.id.toInt() == vm.activeComment }?.line,
                         activeRange = vm.commentRange,
                         modifier = Modifier.fillMaxSize(),

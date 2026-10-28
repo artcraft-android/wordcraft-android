@@ -1027,9 +1027,16 @@ impl MobileSession {
     /// Search again as Find's text or options change (`params` as `edit.find` takes them): from
     /// the start of the selected match, so the match being typed stays the selected one.
     pub fn find_again(&self, params: String) -> Result<FindView, MobileError> {
-        let params: Value = serde_json::from_str(&params).map_err(|e| MobileError::Command(format!("edit.find: parameters are not JSON: {e}")))?;
+        let mut params: Value =
+            serde_json::from_str(&params).map_err(|e| MobileError::Command(format!("edit.find: parameters are not JSON: {e}")))?;
         {
             let mut s = self.lock();
+            // deleted text that shows (All Markup, Original) is searched too, as the phone app's Find does
+            let shown = (s.view.show_markup && s.view.markup_view == wordcraft_engine::MarkupView::All)
+                || s.view.markup_view == wordcraft_engine::MarkupView::Original;
+            if let Some(o) = params.as_object_mut() {
+                o.insert("deletedText".into(), Value::Bool(shown));
+            }
             let (a, b) = s.sel.ordered();
             let (a, b) = (a.clone(), b.clone());
             if s.find.results.iter().any(|(x, y)| *x == a && *y == b) {

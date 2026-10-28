@@ -978,6 +978,20 @@ fn replace_under_track_changes_skips_deleted_text() {
     assert_eq!(text(&s), "one dog two dog");
 }
 
+/// While deletions show, Find (as the phone app's) reads deleted text too; Replace never does.
+#[test]
+fn find_can_read_tracked_deleted_text() {
+    let mut s = s();
+    run(&mut s, "document.setText", json!({"text": "The work, weather allowing."}));
+    run(&mut s, "review.trackChanges", json!({"value": true}));
+    run(&mut s, "select.text", json!({"text": ", weather allowing"}));
+    run(&mut s, "text.delete", json!({}));
+    assert_eq!(run(&mut s, "edit.find", json!({"text": "the"}))["count"], 1, "the live text only");
+    assert_eq!(run(&mut s, "edit.find", json!({"text": "the", "deletedText": true}))["count"], 2, "and the deleted \"weather\"");
+    // Replace keeps to the live text whatever Find reads
+    assert_eq!(run(&mut s, "edit.replaceAll", json!({"text": "the", "with": "a"}))["replaced"], 1);
+}
+
 #[test]
 fn find_reads_the_text_around_tracked_deletions() {
     // `edits` are (start, end) byte ranges deleted with Track Changes on, last first.
@@ -7886,7 +7900,9 @@ fn display_for_review_shows_four_views() {
     let l = s.layout();
     let opts = DisplayOptions { markup: false, simple_markup: true, ..Default::default() };
     let draws = page_display(&s.doc, &l.pages[0], &opts);
-    assert!(draws.iter().any(|d| matches!(d, Draw::Line { color, .. } if *color == SIMPLE_MARKUP_BAR)), "a red bar");
+    // a red bar, kept as it is on a dark page
+    let kept: Vec<&Draw> = draws.iter().flat_map(|d| if let Draw::Kept { items } = d { items.iter().collect() } else { Vec::new() }).collect();
+    assert!(kept.iter().any(|d| matches!(d, Draw::Line { color, .. } if *color == SIMPLE_MARKUP_BAR)), "a red bar");
     assert!(s.run("review.markup", &json!({"value": "sideways"})).is_err());
     // no value: markup on and off
     run(&mut s, "review.markup", json!({}));

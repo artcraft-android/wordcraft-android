@@ -345,7 +345,7 @@ private data class TileKey(val page: Int, val tx: Int, val ty: Int, val scale: F
  * A tile's picture, the area of its page it shows (points), and the revision and page size it was
  * drawn for (Mobile View lays the text out again at a new width without a new revision).
  */
-private class Tile(val bitmap: Bitmap, val x: Float, val y: Float, val w: Float, val h: Float, val revision: ULong, val pageW: Float, val pageH: Float)
+private class Tile(val bitmap: Bitmap, val x: Float, val y: Float, val w: Float, val h: Float, val revision: ULong, val pageW: Float, val pageH: Float, val look: Any?)
 
 /**
  * The document's pages: scrolled and pinch-zoomed by touch, drawn by the engine in tiles, with the
@@ -375,6 +375,7 @@ fun DocumentView(
     commentMarks: List<io.github.artcraftandroid.wordcraft.core.PageRect> = emptyList(),
     activeMark: io.github.artcraftandroid.wordcraft.core.PageRect? = null,
     activeRange: List<io.github.artcraftandroid.wordcraft.core.PageRect> = emptyList(),
+    look: Any? = null,
     highlightColor: Color = Color(0x4D4C6EF5),
     dark: Boolean = false,
     findMatches: List<io.github.artcraftandroid.wordcraft.core.PageRect> = emptyList(),
@@ -429,13 +430,14 @@ fun DocumentView(
             keys
         }
     }
-    LaunchedEffect(needed, info.revision, info.pages, dark) {
+    // `look`: how the pages are shown apart from their text (Display for Review); a change draws them again
+    LaunchedEffect(needed, info.revision, info.pages, dark, look) {
         val keys = needed ?: return@LaunchedEffect
         val scale = keys.firstOrNull()?.scale ?: return@LaunchedEffect
         for (key in keys) {
             val p = info.pages.getOrNull(key.page) ?: continue
             val have = tiles[key]
-            if (have != null && have.revision == info.revision && have.pageW == p.width && have.pageH == p.height) continue
+            if (have != null && have.revision == info.revision && have.pageW == p.width && have.pageH == p.height && have.look == look) continue
             val x = key.tx * TILE_PX / scale
             val y = key.ty * TILE_PX / scale
             val w = min(TILE_PX / scale, p.width - x)
@@ -443,7 +445,7 @@ fun DocumentView(
             if (w <= 0f || h <= 0f) continue
             val img = runCatching { engine.render { renderArea(key.page.toUInt(), x, y, w, h, scale) } }.getOrNull() ?: continue
             val bmp = img.toBitmap() ?: continue
-            tiles[key] = Tile(bmp, x, y, w, h, info.revision, p.width, p.height)
+            tiles[key] = Tile(bmp, x, y, w, h, info.revision, p.width, p.height, look)
         }
         // the visible area is covered at this scale: let the other scales go, and keep this
         // scale's tiles one row and column around the view for scrolling back

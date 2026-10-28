@@ -440,14 +440,19 @@ pub fn page_display(doc: &Document, page: &Page, opts: &DisplayOptions) -> Vec<D
     if opts.markup && (opts.revisions.insertions_deletions || opts.revisions.formatting) && opts.revisions.changed_lines != ChangeBar::None {
         change_bars(doc, page, &opts.revisions, ba, opts.outer_margin, &mut out);
     } else if opts.simple_markup && !opts.markup {
-        // the final text, each changed line marked by a red bar where the bars go
+        // the final text, each changed line marked by a red bar where the bars go; the same red
+        // on a dark page, as the phone app keeps it
         let bars = MarkupOptions {
             changed_lines: if opts.revisions.changed_lines == ChangeBar::None { ChangeBar::default() } else { opts.revisions.changed_lines },
             changed_lines_color: Some(SIMPLE_MARKUP_BAR),
             insertions_deletions: true,
             ..opts.revisions.clone()
         };
-        change_bars(doc, page, &bars, ba, opts.outer_margin, &mut out);
+        let mut red = Vec::new();
+        change_bars(doc, page, &bars, ba, opts.outer_margin, &mut red);
+        if !red.is_empty() {
+            out.push(Draw::Kept { items: red });
+        }
     }
     out
 }
@@ -627,8 +632,8 @@ fn warped_text(
 pub const CHANGE_BAR: Rgb = Rgb(0x70, 0x70, 0x70);
 /// The light grey behind commented text, as the phone app shades it.
 const COMMENT_SHADE: Rgb = Rgb(0xE8, 0xE8, 0xE8);
-/// The colour of Simple Markup's bars.
-pub const SIMPLE_MARKUP_BAR: Rgb = Rgb(0xD1, 0x34, 0x38);
+/// The colour of Simple Markup's bars: red, as the phone app draws them on light and dark pages.
+pub const SIMPLE_MARKUP_BAR: Rgb = Rgb(0xFF, 0x00, 0x00);
 
 /// Bars in the margin beside body lines with tracked insertions or deletions, or (when shown)
 /// tracked formatting changes of their text, paragraph or paragraph mark.

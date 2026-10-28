@@ -94,7 +94,7 @@ pub fn specs() -> Vec<CommandSpec> {
         .pure(),
         CommandSpec::new("edit.find", "Find", "Home › Editing", find)
             .key("Mod+F")
-            .params(r#"{"text": string, "matchCase"?: bool, "wholeWord"?: bool, "matchPrefix"?: bool, "matchSuffix"?: bool, "ignorePunct"?: bool, "ignoreSpace"?: bool, "wildcards"?: bool, "special"?: bool (^p ^t ^# … codes, default true), "regex"?: bool, "soundsLike"?: bool (English, whole words)}"#)
+            .params(r#"{"text": string, "matchCase"?: bool, "wholeWord"?: bool, "matchPrefix"?: bool, "matchSuffix"?: bool, "ignorePunct"?: bool, "ignoreSpace"?: bool, "wildcards"?: bool, "special"?: bool (^p ^t ^# … codes, default true), "regex"?: bool, "soundsLike"?: bool (English, whole words), "deletedText"?: bool (tracked-deleted text too; Replace never)}"#)
             .pure(),
         CommandSpec::new("edit.advancedFind", "Advanced Find", "Home › Editing › Find", advanced_find)
             .params(r#"{"text"?: string, …options of edit.find, "in"?: "main|selection", "highlight"?: bool}"#)
@@ -411,6 +411,8 @@ pub(crate) fn search_full(s: &Session, story: StoryRef, with_rep: bool) -> Resul
         .build(&c.pattern)
         .map_err(|e| CmdError::Params(format!("bad pattern: {e}")))?;
     let pieces = with_rep.then(|| find_pattern::parse_replace(&f.replace, &opts));
+    // Replace never reads deleted text: it would find its own deletions again
+    let deleted_too = f.deleted_too && !with_rep;
     let paths = s.doc.para_paths(story);
     // Paragraphs read as one text: consecutive siblings when the pattern spans paragraphs.
     let mut chunks: Vec<std::ops::Range<usize>> = Vec::new();
@@ -437,7 +439,7 @@ pub(crate) fn search_full(s: &Session, story: StoryRef, with_rep: bool) -> Resul
             };
             let mut expect = 0;
             for (r, ch) in p.run_ranges() {
-                let Some(t) = p.text.get(r.clone()).filter(|_| ch.del.is_none()) else { continue };
+                let Some(t) = p.text.get(r.clone()).filter(|_| ch.del.is_none() || deleted_too) else { continue };
                 if t.is_empty() {
                     continue;
                 }
@@ -555,6 +557,9 @@ fn read_opts(s: &mut Session, v: &Value) {
     }
     if let Some(b) = p::bool(v, "soundsLike") {
         s.find.sounds_like = b;
+    }
+    if let Some(b) = p::bool(v, "deletedText") {
+        s.find.deleted_too = b;
     }
     if let Some(t) = p::str(v, "with") {
         s.find.replace = t.to_string();
